@@ -1,16 +1,14 @@
 # RelicVault
 
-Warframe のレリックと Prime パーツの所持状況を管理する。
+Warframe のレリックと Prime パーツの所持状況を管理する Web アプリ。
 
 - レリックを **名前でも報酬パーツ名でも** 検索できる（「Saryn」で 28 件など）
 - パーツごとに **未所持 / 所持中 / 作成済み** を記録し、セット単位で完成度を集計する
 - **フレンドの所持状況も並べて見られる**ので、一緒にレリックを開けるとき誰の分が足りないか分かる
 
-本体は `web/` の Web アプリ。`ios/` には最初に作った SwiftUI 版が残してある。
-
-## web — Web アプリ（こちらが本体）
-
 React + TypeScript + Vite。通信なしで動き、データはブラウザの中だけに保存される。
+
+## 動かす
 
 ```sh
 cd web
@@ -21,7 +19,7 @@ npm run typecheck
 npx vitest run     # 共有コードの往復テスト
 ```
 
-画面は 4 つ。
+## 画面
 
 | タブ | 役割 |
 | --- | --- |
@@ -33,7 +31,9 @@ npx vitest run     # 共有コードの往復テスト
 所持状態は、行の右端の丸をタップすると 未所持 → 所持中 → 作成済み と巡回する。
 パーツ詳細の Picker からも選べる。
 
-### フレンドと状況を共有する 2 つの方法
+ホーム画面に追加すればアプリのように全画面で使える（PWA のマニフェストを同梱）。
+
+## フレンドと状況を共有する 2 つの方法
 
 **共有コード（seed）** — サーバー不要。自分の状況を 1 本の文字列にして渡す。
 596 パーツ分を 1 パーツ 2 ビットで詰め、deflate をかけて base64url にしているので、
@@ -59,7 +59,9 @@ Firebase Firestore の無料枠を使う。相手はログイン不要（匿名�
 `firebaseConfig` は公開されて構わない値で、実際の保護は `firestore.rules` が行う。
 ルールは「ルームコードを知っている人だけが読め、書けるのは自分の行だけ」という内容。
 
-### 公開する
+Firebase SDK は設定があるときだけ読み込むので、使わなければ通信もダウンロードも起きない。
+
+## 公開する
 
 `.github/workflows/deploy.yml` を置いてあるので、GitHub リポジトリを作って push すれば
 GitHub Pages に出る（リポジトリの Settings > Pages で Source を GitHub Actions にする）。
@@ -67,29 +69,9 @@ GitHub Pages に出る（リポジトリの Settings > Pages で Source を GitH
 
 ルーム同期を使うなら、リポジトリの Secrets に `VITE_FIREBASE_*` を入れる。
 
-ホーム画面に追加すればアプリのように全画面で使える（PWA のマニフェストを同梱）。
-
-## ios — SwiftUI 版
-
-最初に作った iPhone アプリ。Web に移る前の実装で、フレンド共有は入っていない。
-
-```sh
-open ios/RelicVault.xcodeproj
-```
-
-コマンドラインからビルドと UI テストもできる。
-
-```sh
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-xcodebuild -project ios/RelicVault.xcodeproj -scheme RelicVault \
-  -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
-```
-
-実機に入れるには署名が要る。無料の Apple ID でも入れられるが、7 日で失効する。
-
 ## データの更新
 
-新しい Prime が実装されたら、スクリプトを流し直す。`ios/` と `web/` の両方に書き出される。
+新しい Prime が実装されたら、スクリプトを流し直す。
 
 ```sh
 python3 Tools/generate_data.py
@@ -123,7 +105,6 @@ web/
     state/     所持状態・共有コード・ルーム同期
     ui/        画面
   public/      同梱する JSON と PWA アイコン
-ios/           SwiftUI 版
 Tools/         マスターデータ生成
 firestore.rules
 ```

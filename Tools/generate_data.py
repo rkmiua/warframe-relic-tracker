@@ -221,7 +221,6 @@ def main():
     ap.add_argument("--cache", help="取得済み JSON を置くディレクトリ")
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--out", nargs="*", default=[
-        os.path.join(root, "ios", "RelicVault", "Resources", "warframe_data.json"),
         os.path.join(root, "web", "public", "warframe_data.json"),
     ])
     args = ap.parse_args()

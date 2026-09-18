@@ -7,10 +7,5 @@ web/dist/
 .env.local
 *.local
 
-# Xcode
-**/xcuserdata/
-**/DerivedData/
-*.xcworkspace/xcuserdata/
-
 # TypeScript のビルドキャッシュ
 *.tsbuildinfo
