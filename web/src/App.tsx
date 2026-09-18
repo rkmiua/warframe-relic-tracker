@@ -193,7 +193,10 @@ export function App() {
     // ページ遷移でログインして戻ってきた場合の結果を先に拾う
     void resumeRedirectSignIn()
       .then((returned) => {
-        if (returned && !cancelled) setAccount(returned)
+        if (!returned || cancelled) return
+        setAccount(returned)
+        // 遷移で戻ってきた場合も、向こうにある記録を正とする
+        updatedAt.current = 0
       })
       .catch((error: unknown) => {
         if (!cancelled) setAuthError(describeAuthError(error))

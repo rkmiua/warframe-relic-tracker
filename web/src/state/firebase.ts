@@ -71,6 +71,24 @@ export async function watchAccount(onChange: (account: Account | null) => void):
  */
 const REDIRECT_FLAG = 'relic-vault.redirecting.v1'
 
+/**
+ * ポップアップでのログインが通らない環境か。
+ *
+ * iOS の Safari は、別オリジン（firebaseapp.com）で開いたポップアップの結果を
+ * 元のページに返せない。ログイン自体は終わっているのに画面が待ち続けてしまうので、
+ * 最初からページ遷移で行う。
+ */
+function needsRedirect(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  const iOS =
+    /iPad|iPhone|iPod/.test(ua) ||
+    // iPadOS はデスクトップ版 Safari を名乗る
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const safari = /safari/i.test(ua) && !/chrome|chromium|crios|edg|firefox|fxios|opr/i.test(ua)
+  return iOS || safari
+}
+
 /** ポップアップが使えない環境（ブロックされている、モバイルの一部）ではページ遷移で行う。 */
 async function fallbackToRedirect(): Promise<never> {
   const { auth } = await getFirebase()
@@ -113,6 +131,9 @@ export async function signInWithGoogle(): Promise<{ account: Account; keptLocalD
     const code = (error as { code?: string }).code
     return code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment'
   }
+
+  // iOS / Safari はポップアップの結果を受け取れないので、試さずに遷移する
+  if (needsRedirect()) return fallbackToRedirect()
 
   const current = auth.currentUser
   if (current?.isAnonymous) {
