@@ -42,24 +42,24 @@ export interface DecodedSeed {
 export async function decodeSeed(seed: string): Promise<DecodedSeed> {
   const trimmed = seed.trim()
   const dot = trimmed.indexOf('.')
-  if (dot < 0) throw new Error('共有コードの形式が違います')
+  if (dot < 0) throw new Error('データの形式が違います')
 
   const prefix = trimmed.slice(0, dot)
   if (!prefix.startsWith(MAGIC)) {
-    throw new Error('別のアプリの共有コードのようです')
+    throw new Error('別のアプリのデータのようです')
   }
   const mode = prefix.slice(MAGIC.length)
-  if (mode !== 'U' && mode !== 'C') throw new Error('共有コードの形式が違います')
+  if (mode !== 'U' && mode !== 'C') throw new Error('データの形式が違います')
 
   let bytes: Uint8Array
   try {
     bytes = fromBase64Url(trimmed.slice(dot + 1))
   } catch {
-    throw new Error('共有コードが壊れています')
+    throw new Error('データが壊れています')
   }
   if (mode === 'C') bytes = await inflate(bytes)
 
-  if (bytes.length < HEADER_BYTES) throw new Error('共有コードが壊れています')
+  if (bytes.length < HEADER_BYTES) throw new Error('データが壊れています')
   const version = bytes[0]
   if (version !== VERSION) {
     throw new Error(`対応していないバージョンです (v${version})`)
@@ -89,7 +89,7 @@ async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
 
 async function inflate(bytes: Uint8Array): Promise<Uint8Array> {
   if (typeof DecompressionStream === 'undefined') {
-    throw new Error('この環境では圧縮された共有コードを読めません')
+    throw new Error('この環境では圧縮されたデータを読めません')
   }
   return streamThrough(new DecompressionStream('deflate-raw'), bytes)
 }

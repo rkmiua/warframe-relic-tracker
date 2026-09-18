@@ -81,7 +81,6 @@ export async function joinRoom(code: string, callbacks: RoomCallbacks): Promise<
               data.updatedAt && typeof data.updatedAt === 'object' && 'seconds' in data.updatedAt
                 ? (data.updatedAt as { seconds: number }).seconds * 1000
                 : 0,
-            source: 'room',
           })
         }
         members.sort((a, b) => a.name.localeCompare(b.name))

@@ -9,10 +9,7 @@ import { SQUAD_LIMIT } from '../state/squad'
 export interface FriendsScreenProps {
   myName: string
   onChangeName: (name: string) => void
-  mySeed: string
   members: Member[]
-  onImportSeed: (seed: string, name: string) => Promise<void>
-  onRemoveMember: (id: string) => void
   squadIDs: string[]
   onToggleSquad: (id: string) => void
   roomCode: string | null
@@ -25,9 +22,6 @@ export interface FriendsScreenProps {
 
 export function FriendsScreen(props: FriendsScreenProps) {
   const [copied, setCopied] = useState(false)
-  const [seedInput, setSeedInput] = useState('')
-  const [seedName, setSeedName] = useState('')
-  const [seedError, setSeedError] = useState<string | null>(null)
   const [codeInput, setCodeInput] = useState('')
   const [hasConfig, setHasConfig] = useState(() => loadFirebaseConfig() !== null)
 
@@ -43,17 +37,6 @@ export function FriendsScreen(props: FriendsScreenProps) {
       setCopied(true)
     } catch {
       setCopied(false)
-    }
-  }
-
-  const importSeed = async () => {
-    setSeedError(null)
-    try {
-      await props.onImportSeed(seedInput, seedName.trim() || 'フレンド')
-      setSeedInput('')
-      setSeedName('')
-    } catch (error) {
-      setSeedError(error instanceof Error ? error.message : '読み込めませんでした')
     }
   }
 
@@ -82,52 +65,30 @@ export function FriendsScreen(props: FriendsScreenProps) {
           <Empty
             glyph={<PeopleIcon size={44} />}
             title="まだ誰もいません"
-            description="ルームに参加するか、共有コードを取り込むと、ここに並びます。"
+            description={
+              props.roomCode
+                ? 'ルームのコードを相手に伝えると、ここに並びます。'
+                : 'ルームを作るか、相手のコードで参加すると、ここに並びます。'
+            }
           />
         ) : (
           <div className="list">
-            {props.members.map((member) => (
-              <Row
-                key={member.id}
-                onClick={() => props.onToggleSquad(member.id)}
-                trailing={
-                  member.source === 'seed' ? (
-                    <button
-                      type="button"
-                      style={{ color: 'var(--red)', fontSize: 15 }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        props.onRemoveMember(member.id)
-                      }}
-                    >
-                      削除
-                    </button>
-                  ) : (
-                    <span className="trail" style={{ color: 'var(--green)' }}>
-                      同期中
-                    </span>
-                  )
-                }
-              >
-                <span
-                  className="status"
-                  data-status={props.squadIDs.includes(member.id) ? 2 : 0}
-                  aria-label={props.squadIDs.includes(member.id) ? '分隊にいる' : '分隊にいない'}
-                >
-                  <StatusIcon status={props.squadIDs.includes(member.id) ? 2 : 0} />
-                </span>
-                <span className="grow">
-                  <span className="title">{member.name}</span>
-                  <span className="sub">
-                    {member.source === 'room' ? 'ルーム' : '共有コード'} ·{' '}
-                    {member.states.size} パーツ記録済み
+            {props.members.map((member) => {
+              const inSquad = props.squadIDs.includes(member.id)
+              return (
+                <Row key={member.id} onClick={() => props.onToggleSquad(member.id)}>
+                  <span className="status" data-status={inSquad ? 2 : 0} aria-label={inSquad ? '分隊にいる' : '分隊にいない'}>
+                    <StatusIcon status={inSquad ? 2 : 0} />
                   </span>
-                </span>
-              </Row>
-            ))}
+                  <span className="grow">
+                    <span className="title">{member.name}</span>
+                    <span className="sub">{member.states.size} パーツ記録済み</span>
+                  </span>
+                </Row>
+              )
+            })}
           </div>
         )}
-
 
         <div className="card">
           <h2>ルームで同期</h2>
@@ -174,14 +135,22 @@ export function FriendsScreen(props: FriendsScreenProps) {
                 />
                 <button
                   type="button"
-                  style={{ color: isValidRoomCode(codeInput) ? 'var(--accent)' : 'var(--tertiary)', whiteSpace: 'nowrap' }}
+                  style={{
+                    color: isValidRoomCode(codeInput) ? 'var(--accent)' : 'var(--tertiary)',
+                    whiteSpace: 'nowrap',
+                  }}
                   disabled={!isValidRoomCode(codeInput) || props.connecting}
                   onClick={() => props.onJoinRoom(codeInput)}
                 >
                   参加
                 </button>
               </div>
-              <button type="button" style={{ color: 'var(--accent)' }} disabled={props.connecting} onClick={props.onCreateRoom}>
+              <button
+                type="button"
+                style={{ color: 'var(--accent)' }}
+                disabled={props.connecting}
+                onClick={props.onCreateRoom}
+              >
                 新しいルームを作る
               </button>
             </>
@@ -189,46 +158,6 @@ export function FriendsScreen(props: FriendsScreenProps) {
           {props.connecting && <p className="note">接続しています…</p>}
           {props.roomError && <p className="error">{props.roomError}</p>}
         </div>
-
-        <div className="card">
-          <h2>共有コードで渡す</h2>
-          <p className="note" style={{ marginTop: 0 }}>
-            ネットにつながなくても、この文字列を送れば今の状況を相手に渡せます。
-          </p>
-          <textarea className="field" readOnly value={props.mySeed} rows={3} onFocus={(e) => e.target.select()} />
-          <button type="button" style={{ color: 'var(--accent)', marginTop: 8 }} onClick={() => void copy(props.mySeed)}>
-            {copied ? 'コピーしました' : '自分のコードをコピー'}
-          </button>
-        </div>
-
-        <div className="card">
-          <h2>共有コードを取り込む</h2>
-          <input
-            className="field"
-            value={seedName}
-            placeholder="相手の名前"
-            maxLength={20}
-            onChange={(e) => setSeedName(e.target.value)}
-          />
-          <textarea
-            className="field"
-            style={{ marginTop: 8 }}
-            value={seedInput}
-            rows={3}
-            placeholder="RV1C.… を貼り付け"
-            onChange={(e) => setSeedInput(e.target.value)}
-          />
-          <button
-            type="button"
-            style={{ color: seedInput.trim() ? 'var(--accent)' : 'var(--tertiary)', marginTop: 8 }}
-            disabled={!seedInput.trim()}
-            onClick={() => void importSeed()}
-          >
-            取り込む
-          </button>
-          {seedError && <p className="error">{seedError}</p>}
-        </div>
-
       </div>
     </>
   )
@@ -245,7 +174,7 @@ function FirebaseSetup({ onSaved }: { onSaved: () => void }) {
     <>
       <p className="note" style={{ marginTop: 0 }}>
         ルーム同期には Firebase の設定が要ります。Firebase コンソールで作った Web アプリの
-        設定（firebaseConfig）をそのまま貼り付けてください。設定しなくても、下の共有コードは使えます。
+        設定（firebaseConfig）をそのまま貼り付けてください。
       </p>
       <textarea
         className="field"

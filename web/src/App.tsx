@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'r
 import { Catalog, loadCatalog } from './data/catalog'
 import { NOT_OWNED, type Part, type Status } from './data/types'
 import { loadCollection, saveCollection, withStatus } from './state/collection'
-import { decodeSeed, encodeSeed, type StatusMap } from './state/seed'
-import { loadMembers, loadMyName, saveMembers, saveMyName, type Member } from './state/members'
+import { encodeSeed, type StatusMap } from './state/seed'
+import { loadMyName, saveMyName, type Member } from './state/members'
 import { generateRoomCode, joinRoom, type RoomHandle } from './state/sync'
 import { loadSquad, saveSquad, toggleSquad } from './state/squad'
 import { AppContext, type Route } from './ui/context'
@@ -30,8 +30,7 @@ export function App() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [states, setStates] = useState<StatusMap>(loadCollection)
-  const [seedMembers, setSeedMembers] = useState<Member[]>(loadMembers)
-  const [roomMembers, setRoomMembers] = useState<Member[]>([])
+  const [members, setMembers] = useState<Member[]>([])
   const [myName, setMyName] = useState(loadMyName)
   const [squadIDs, setSquadIDs] = useState<string[]>(loadSquad)
   const [mySeed, setMySeed] = useState('')
@@ -55,7 +54,6 @@ export function App() {
   }, [])
 
   useEffect(() => saveCollection(states), [states])
-  useEffect(() => saveMembers(seedMembers), [seedMembers])
   useEffect(() => saveMyName(myName), [myName])
   useEffect(() => saveSquad(squadIDs), [squadIDs])
 
@@ -86,7 +84,7 @@ export function App() {
     setConnecting(true)
     setRoomError(null)
     joinRoom(code, {
-      onMembers: setRoomMembers,
+      onMembers: setMembers,
       onError: setRoomError,
     }).then(
       (handle) => {
@@ -119,7 +117,7 @@ export function App() {
   const leaveRoom = useCallback(() => {
     room?.handle.leave()
     setRoom(null)
-    setRoomMembers([])
+    setMembers([])
     setRoomError(null)
     try {
       localStorage.removeItem(ROOM_KEY)
@@ -158,21 +156,12 @@ export function App() {
     [tab],
   )
 
-  const members = useMemo(() => [...roomMembers, ...seedMembers], [roomMembers, seedMembers])
-
   // 分隊を選んでいればその人たちだけを見る。選んでいなければ全員。
   const squad = useMemo(() => {
     const picked = squadIDs.map((id) => members.find((m) => m.id === id)).filter((m): m is Member => !!m)
     return picked.length > 0 ? picked : members
   }, [members, squadIDs])
 
-  const importSeed = useCallback(async (seed: string, name: string) => {
-    const { states: imported } = await decodeSeed(seed)
-    setSeedMembers((current) => [
-      ...current.filter((m) => m.name !== name),
-      { id: `seed-${Date.now()}`, name, states: imported, updatedAt: Date.now(), source: 'seed' },
-    ])
-  }, [])
 
   const context = useMemo(
     () => (catalog ? { catalog, states, setStatus, setMany, members, squad, push } : null),
@@ -197,23 +186,25 @@ export function App() {
   const stack = stacks[tab]
   const route = stack[stack.length - 1]
 
-  const screen = (() => {
-    if (route) {
-      switch (route.kind) {
-        case 'relic': {
-          const relic = catalog.relic(route.id)
-          return relic ? <RelicDetailScreen relic={relic} onBack={pop} /> : null
-        }
-        case 'set': {
-          const set = catalog.set(route.id)
-          return set ? <SetDetailScreen set={set} onBack={pop} /> : null
-        }
-        case 'part': {
-          const part = catalog.part(route.id)
-          return part ? <PartDetailScreen part={part} onBack={pop} /> : null
-        }
+  const detail = (() => {
+    if (!route) return null
+    switch (route.kind) {
+      case 'relic': {
+        const relic = catalog.relic(route.id)
+        return relic ? <RelicDetailScreen relic={relic} onBack={pop} /> : null
+      }
+      case 'set': {
+        const set = catalog.set(route.id)
+        return set ? <SetDetailScreen set={set} onBack={pop} /> : null
+      }
+      case 'part': {
+        const part = catalog.part(route.id)
+        return part ? <PartDetailScreen part={part} onBack={pop} /> : null
       }
     }
+  })()
+
+  const rootScreen = (() => {
     switch (tab) {
       case 'relics':
         return <RelicListScreen />
@@ -226,13 +217,7 @@ export function App() {
           <FriendsScreen
             myName={myName}
             onChangeName={setMyName}
-            mySeed={mySeed}
             members={members}
-            onImportSeed={importSeed}
-            onRemoveMember={(id) => {
-              setSeedMembers((current) => current.filter((m) => m.id !== id))
-              setSquadIDs((current) => current.filter((x) => x !== id))
-            }}
             squadIDs={squadIDs}
             onToggleSquad={(id) => setSquadIDs((current) => toggleSquad(current, id))}
             roomCode={room?.code ?? null}
@@ -249,7 +234,9 @@ export function App() {
   return (
     <AppContext.Provider value={context}>
       <div className="app">
-        {screen}
+        {/* 一覧は詳細を開いても外さない。外すと検索や絞り込みが消えてしまう */}
+        <div style={{ display: detail ? 'none' : 'contents' }}>{rootScreen}</div>
+        {detail}
         <nav className="tabbar">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button

@@ -3,19 +3,21 @@ import { Empty, NavBar, RarityDot, Row, SearchField, Segmented, StatusButton, Ti
 import { BoxIcon } from './icons'
 import { MemberBadges } from './MemberBadges'
 import { useApp } from './context'
-import { collected, progressOf, statusOf } from '../state/collection'
+import { collected, hasWantedReward, progressOf, statusOf, wantedRewardCount } from '../state/collection'
 import { REFINEMENTS, REFINEMENT_LABELS, TIERS, type Refinement, type Relic, type RelicTier } from '../data/types'
 
 export function RelicListScreen() {
-  const { catalog, states, push } = useApp()
+  const { catalog, states, squad, push } = useApp()
   const [query, setQuery] = useState('')
   const [tier, setTier] = useState<RelicTier | null>(null)
   const [vaultedOnly, setVaultedOnly] = useState(false)
+  const [wantedOnly, setWantedOnly] = useState(false)
 
-  const results = useMemo(
-    () => catalog.searchRelics(query, tier, vaultedOnly),
-    [catalog, query, tier, vaultedOnly],
-  )
+  const results = useMemo(() => {
+    const matched = catalog.searchRelics(query, tier, vaultedOnly)
+    if (!wantedOnly) return matched
+    return matched.filter((relic) => hasWantedReward(relic, catalog, states, squad))
+  }, [catalog, query, tier, vaultedOnly, wantedOnly, states, squad])
 
   return (
     <>
@@ -35,13 +37,25 @@ export function RelicListScreen() {
           <button type="button" aria-pressed={vaultedOnly} onClick={() => setVaultedOnly(!vaultedOnly)}>
             Vaulted
           </button>
+          <button
+            type="button"
+            aria-pressed={wantedOnly}
+            onClick={() => setWantedOnly(!wantedOnly)}
+            title="自分か分隊の誰かが、まだ持っていない報酬が入っているレリックだけを出す"
+          >
+            要るものがある
+          </button>
         </div>
 
         {results.length === 0 ? (
           <Empty
             glyph={<BoxIcon size={44} />}
-            title="見つかりません"
-            description="レリック名（Lith A1）か、報酬のパーツ名で探せます。"
+            title={wantedOnly ? '要るものがありません' : '見つかりません'}
+            description={
+              wantedOnly
+                ? 'この条件だと、誰もまだ持っていない報酬を含むレリックはありません。'
+                : 'レリック名（Lith A1）か、報酬のパーツ名で探せます。'
+            }
           />
         ) : (
           <>
@@ -50,15 +64,23 @@ export function RelicListScreen() {
               {results.map((relic) => {
                 const progress = progressOf(relic.rewards.map((r) => r.partID), catalog, states)
                 const missing = progress.total - collected(progress)
+                // 分隊がいるときは、自分だけでなく「誰かが欲しい数」を出すほうが役に立つ
+                const wanted = squad.length > 0 ? wantedRewardCount(relic, catalog, states, squad) : null
                 return (
                   <Row
                     key={relic.id}
                     onClick={() => push({ kind: 'relic', id: relic.id })}
                     chevron
                     trailing={
-                      <span className="trail" style={missing === 0 ? { color: 'var(--green)' } : undefined}>
-                        {missing === 0 ? 'すべて所持' : `未所持 ${missing}`}
-                      </span>
+                      wanted !== null ? (
+                        <span className="trail" style={wanted === 0 ? { color: 'var(--green)' } : undefined}>
+                          {wanted === 0 ? '要るものなし' : `要る ${wanted}`}
+                        </span>
+                      ) : (
+                        <span className="trail" style={missing === 0 ? { color: 'var(--green)' } : undefined}>
+                          {missing === 0 ? 'すべて所持' : `未所持 ${missing}`}
+                        </span>
+                      )
                     }
                   >
                     <TierGlyph tier={relic.tier} />

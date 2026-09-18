@@ -46,7 +46,7 @@ describe('seed', () => {
     expect(states.size).toBe(0)
   })
 
-  test('疎な状態なら十分短い', async () => {
+  test('疎な状態なら十分小さい', async () => {
     const states = sample([[10, CRAFTED], [200, OWNED]])
     const seed = await encodeSeed(states, SLOTS)
     expect(seed.length).toBeLessThan(120)
@@ -68,7 +68,7 @@ describe('seed', () => {
     expect(back.has(9999)).toBe(false)
   })
 
-  test('壊れたコードは理由の分かるエラーになる', async () => {
+  test('壊れたデータは理由の分かるエラーになる', async () => {
     await expect(decodeSeed('こんにちは')).rejects.toThrow('形式が違います')
     await expect(decodeSeed('XX1.abcd')).rejects.toThrow('別のアプリ')
     await expect(decodeSeed('RV1C.@@@@')).rejects.toThrow()
