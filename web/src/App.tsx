@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { Catalog, loadCatalog } from './data/catalog'
 import { NOT_OWNED, type Part, type Status } from './data/types'
 import { loadCollection, saveCollection, withStatus } from './state/collection'
@@ -155,6 +155,29 @@ export function App() {
     () => setStacks((current) => ({ ...current, [tab]: current[tab].slice(0, -1) })),
     [tab],
   )
+
+  // タブと階層ごとにスクロール位置を覚えておく。
+  // 覚えないと、別のタブに移ったときに前のタブの位置のままになってしまう。
+  const scrollPositions = useRef<Record<string, number>>({})
+  const scrollKey = `${tab}:${stacks[tab].length}`
+
+  // 画面を切り替えた「後」に控えると、中身の高さが変わってブラウザが勝手に
+  // スクロール位置を詰めた後の値を拾ってしまう。だからスクロールのたびに控える。
+  useEffect(() => {
+    const remember = () => {
+      scrollPositions.current[scrollKey] = window.scrollY
+    }
+    window.addEventListener('scroll', remember, { passive: true })
+    return () => window.removeEventListener('scroll', remember)
+  }, [scrollKey])
+
+  useLayoutEffect(() => {
+    const target = scrollPositions.current[scrollKey] ?? 0
+    window.scrollTo(0, target)
+    // 中身の高さが決まりきる前だと戻しきれないことがあるので、次のフレームでもう一度合わせる
+    const frame = requestAnimationFrame(() => window.scrollTo(0, target))
+    return () => cancelAnimationFrame(frame)
+  }, [scrollKey])
 
   // 分隊を選んでいればその人たちだけを見る。選んでいなければ全員。
   const squad = useMemo(() => {
