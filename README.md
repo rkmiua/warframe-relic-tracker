@@ -2,6 +2,8 @@
 
 Warframe のレリックと Prime パーツの所持状況を管理する Web アプリ。
 
+**https://warframe-relic-tracker-ce330.firebaseapp.com/**
+
 - レリックを **名前でも報酬パーツ名でも** 検索できる（「Saryn」で 28 件など）
 - パーツごとに **未所持 / 所持中 / 作成済み** を記録し、セット単位で完成度を集計する
 - **フレンドの所持状況も並べて見られる**ので、一緒にレリックを開けるとき誰の分が足りないか分かる
@@ -101,11 +103,29 @@ Firebase SDK は設定があるときだけ読み込むので、使わなけれ�
 
 ## 公開する
 
-`.github/workflows/deploy.yml` を置いてあるので、GitHub リポジトリを作って push すれば
-GitHub Pages に出る（リポジトリの Settings > Pages で Source を GitHub Actions にする）。
-`vite.config.ts` の `base` を相対パスにしてあるため、サブディレクトリでもそのまま動く。
+Firebase Hosting から配信している。
 
-ルーム同期を使うなら、リポジトリの Secrets に `VITE_FIREBASE_*` を入れる。
+```sh
+cd web
+npm run login     # 初回だけ。ブラウザで Google アカウントを選ぶ
+npm run deploy    # ビルドして配信まで
+```
+
+`firestore.rules` を変えたときは `npm run deploy:rules`。
+
+### なぜ GitHub Pages ではないのか
+
+Safari は、アプリと認証が別ドメインだとログイン状態を引き継げない
+（ITP によるストレージ分割）。GitHub Pages は静的配信なので Firebase の認証ハンドラ
+（`/__/auth/handler`）を置けず、`firebaseapp.com` へ飛ばすしかなく、iPhone でログインできなかった。
+
+Firebase Hosting なら認証ハンドラが同じオリジンで提供されるので、この問題が起きない。
+`web.app` と `firebaseapp.com` の両方で配信されるが、OAuth クライアントに登録されている
+リダイレクト先は `firebaseapp.com` 側なので、**アプリもそちらの URL を使う**。
+`authDomain` も同じ値に揃える（`web/.env.example` 参照）。
+
+旧アドレス（`rkmiua.github.io/warframe-relic-tracker`）は `redirect/` の案内ページを
+GitHub Pages に置いて、いまのアドレスへ送っている。
 
 ## データの更新
 

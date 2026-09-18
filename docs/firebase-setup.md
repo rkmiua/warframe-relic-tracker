@@ -64,15 +64,15 @@ iPhone と iPad で同じ記録を見たいときに要る。フレンドとの�
 
 ## 2-c. 公開アドレスを承認済みドメインに足す
 
-**これを忘れると「このドメインが承認済みドメインに入っていません」と出てログインできない。**
-初期状態では `localhost` と `＜プロジェクト＞.firebaseapp.com` しか入っておらず、
-GitHub Pages のアドレスは自分で足す必要がある。
+Firebase Hosting から配信している限り、`＜プロジェクト＞.firebaseapp.com` は
+初めから入っているので、この手順は不要。
+別のアドレス（独自ドメインなど）で公開するときだけ足す。
 
 **直接開く: <https://console.firebase.google.com/project/_/authentication/settings>**
 
 1. 「**承認済みドメイン**（Authorized domains）」を開く
 2. 「**ドメインを追加**（Add domain）」
-3. `rkmiua.github.io` と入れる（`https://` やパスは付けない。ホスト名だけ）
+3. `warframe-relic-tracker-ce330.firebaseapp.com` と入れる（`https://` やパスは付けない。ホスト名だけ）
 4. 追加
 
 反映には少し時間がかかることがある。うまくいかないときは、
@@ -165,7 +165,7 @@ gh workflow run "Deploy to GitHub Pages" --repo rkmiua/warframe-relic-tracker
 
 ## 8. 動いているか確かめる
 
-<https://rkmiua.github.io/warframe-relic-tracker/>
+<https://warframe-relic-tracker-ce330.firebaseapp.com/>
 
 フレンドタブを開く。
 
@@ -181,13 +181,13 @@ gh workflow run "Deploy to GitHub Pages" --repo rkmiua/warframe-relic-tracker
 | ルームを読めませんでした | 手順 4 のルールを公開していない |
 | 接続しています… のまま | 手順 2 の匿名ログインが有効になっていない |
 | Google ログインが有効になっていません | 手順 2-b をやっていない |
-| このドメインが承認済みドメインに入っていません | 手順 2-b の承認済みドメインに `rkmiua.github.io` を足す |
+| このドメインが承認済みドメインに入っていません | 手順 2-b の承認済みドメインに `warframe-relic-tracker-ce330.firebaseapp.com` を足す |
 | 自分のデータを読めませんでした | 手順 4 のルールが古い。`users` の項目がある新しい内容に差し替える |
 | メニューに項目が見当たらない | コンソールの分類が変わっている。各手順の直接リンクから開く |
 
 ## フレンドに伝えること
 
-> <https://rkmiua.github.io/warframe-relic-tracker/> を開いて、
+> <https://warframe-relic-tracker-ce330.firebaseapp.com/> を開いて、
 > フレンドタブで名前を入れて、コード「XXXXXX」で参加して。
 
 これだけでよい。アカウント登録もアプリのインストールも要らない。

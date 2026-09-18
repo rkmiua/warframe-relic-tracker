@@ -10,7 +10,7 @@
     "typecheck": "tsc -b --noEmit",
     "deploy": "npm run build && firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules",
-    "login": "firebase login"
+    "login": "firebase login --no-localhost"
   },
   "dependencies": {
     "firebase": "^12.4.0",
