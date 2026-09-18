@@ -8,6 +8,10 @@ Warframe のレリックと Prime パーツの所持状況を管理する Web �
 
 React + TypeScript + Vite。通信なしで動き、データはブラウザの中だけに保存される。
 
+Warframe のファンが個人的に作った非公式ツールで、Digital Extremes とは関係がない。
+Warframe および関連する名称は Digital Extremes Ltd. の商標。
+レリックの報酬データは同社が公開しているドロップデータを利用している。
+
 ## 動かす
 
 ```sh
