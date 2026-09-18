@@ -9,3 +9,8 @@ web/dist/
 
 # TypeScript のビルドキャッシュ
 *.tsbuildinfo
+
+# Firebase CLI のログ（アクセストークンが平文で残る）
+*-debug.log
+firebase-debug.log
+firestore-debug.log
