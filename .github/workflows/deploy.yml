@@ -1,34 +1,89 @@
-# 旧アドレス（GitHub Pages）を開いた人を、いまのアドレスへ送るだけのページを置く。
-# アプリ本体は Firebase Hosting から配信している（npm run deploy）。
-name: Redirect old address
+# アプリ本体を Firebase Hosting に配信する。
+#  - web/ 以下を変えて push したとき
+#  - 毎週月曜に、レリックのデータが増えていないか見に行くとき
+#  - 手で動かしたいとき
+name: Deploy
 
 on:
   push:
     branches: [main]
     paths:
-      - 'redirect/**'
+      - 'web/**'
+      - 'firebase.json'
+      - '.firebaserc'
       - '.github/workflows/deploy.yml'
+  schedule:
+    # 毎週月曜 12:00 (JST)。新しい Prime が出たころに拾えればよいので、この頻度で足りる
+    - cron: '0 3 * * 1'
   workflow_dispatch:
+    inputs:
+      refresh_data:
+        description: 'レリックのデータも取り直す'
+        type: boolean
+        default: false
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
         with:
-          path: redirect
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 依存を入れる
+        working-directory: web
+        run: npm ci
+
+      # データの取り直しは、週次と手動指定のときだけ。
+      # パーツ番号は既存の JSON から引き継がれる（引き継ぎ元が無ければスクリプトが止まる）
+      - name: レリックのデータを取り直す
+        if: github.event_name == 'schedule' || inputs.refresh_data
+        run: python3 Tools/generate_data.py
+
+      - name: 変わっていたらコミットする
+        if: github.event_name == 'schedule' || inputs.refresh_data
+        run: |
+          if [ -n "$(git status --porcelain web/public/warframe_data.json)" ]; then
+            git config user.name  'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add web/public/warframe_data.json
+            git commit -m 'レリックのデータを最新に更新'
+            git push
+            echo "データを更新しました"
+          else
+            echo "データに変化はありませんでした"
+          fi
+
+      - name: 検査する
+        working-directory: web
+        run: |
+          npm run typecheck
+          npx vitest run
+
+      - name: 組み立てる
+        working-directory: web
+        run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+
+      - name: 配信する
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WARFRAME_RELIC_TRACKER_CE330 }}
+          channelId: live
+          projectId: warframe-relic-tracker-ce330

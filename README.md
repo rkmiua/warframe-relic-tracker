@@ -115,7 +115,10 @@ Firebase SDK は設定があるときだけ読み込むので、使わなけれ�
 
 ## 公開する
 
-Firebase Hosting から配信している。
+Firebase Hosting から配信している。main に push すれば GitHub Actions が配信する
+（`web/` 以下を変えたときだけ動く）。
+
+手元から配信することもできる。
 
 ```sh
 cd web
@@ -123,7 +126,23 @@ npm run login     # 初回だけ。ブラウザで Google アカウントを選�
 npm run deploy    # ビルドして配信まで
 ```
 
-`firestore.rules` を変えたときは `npm run deploy:rules`。
+`firestore.rules` を変えたときは `npm run deploy:rules`
+（こちらは Actions に載せていない。ルールの変更は事故ると影響が大きいので手元から流す）。
+
+### Actions に要る設定
+
+`Deploy` ワークフローは次の Secrets を使う。
+
+| Secret | 何のため |
+| --- | --- |
+| `FIREBASE_SERVICE_ACCOUNT_WARFRAME_RELIC_TRACKER_CE330` | Firebase Hosting への配信 |
+| `VITE_FIREBASE_API_KEY` ほか 3 つ | ビルド時に埋め込む接続先 |
+
+サービスアカウントは次のコマンドで用意できる。GitHub の Secrets まで自動で登録される。
+
+```sh
+npx firebase init hosting:github
+```
 
 ### なぜ GitHub Pages ではないのか
 
