@@ -48,8 +48,10 @@ function toAccount(user: User): Account {
  */
 export async function watchAccount(onChange: (account: Account | null) => void): Promise<() => void> {
   const { auth } = await getFirebase()
-  const { onAuthStateChanged, signInAnonymously } = await import('firebase/auth')
-  return onAuthStateChanged(auth, (user) => {
+  // onAuthStateChanged だと、匿名アカウントを Google に結び付けたときに呼ばれない
+  // （サインインし直したわけではないため）。トークンの変化を見れば結合でも呼ばれる。
+  const { onIdTokenChanged, signInAnonymously } = await import('firebase/auth')
+  return onIdTokenChanged(auth, (user) => {
     if (user) {
       onChange(toAccount(user))
     } else {

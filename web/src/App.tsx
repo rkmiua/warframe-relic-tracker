@@ -242,8 +242,9 @@ export function App() {
     setSigningIn(true)
     setAuthError(null)
     signInWithGoogle().then(
-      ({ keptLocalData }) => {
+      ({ account: signedIn, keptLocalData }) => {
         setSigningIn(false)
+        setAccount(signedIn)
         // すでに別の端末で使っているアカウントに入ったときは、向こうの記録を正とする。
         // そうしないと、2 台目で少し触っただけの内容が 1 台目の記録を上書きしてしまう。
         if (!keptLocalData) updatedAt.current = 0
