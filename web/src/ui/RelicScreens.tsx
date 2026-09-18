@@ -21,13 +21,44 @@ import {
   untouchedRewardCount,
 } from '../state/collection'
 import { BASE_REFINEMENT, TIERS, isTracked, type Relic, type RelicTier } from '../data/types'
+import type { Catalog } from '../data/catalog'
+import type { StatusMap } from '../state/seed'
 
-/** 人と見比べる絞り込み。ルームに入っているときだけ使う。 */
-type NeedFilter = 'off' | 'untouched' | 'anyone'
+/**
+ * 足りないものを含むレリックに絞る。
+ * 'mine' は自分だけを見るのでいつでも使えるが、残りは見比べる相手が要る。
+ */
+type NeedFilter = 'off' | 'mine' | 'untouched' | 'anyone'
 
 const FILTER_LABEL: Record<Exclude<NeedFilter, 'off'>, string> = {
+  mine: '未所持パーツあり',
   untouched: '全員未所持',
   anyone: '誰かが未所持',
+}
+
+const FILTER_HINT: Record<Exclude<NeedFilter, 'off'>, string> = {
+  mine: '自分にまだ足りていない報酬が入っているレリック',
+  untouched: '自分も分隊のみんなも、まだ 1 個も持っていない報酬が入っているレリック',
+  anyone: '自分か分隊の誰か 1 人でも、まだ足りていない報酬が入っているレリック',
+}
+
+/** 絞り込みの種類ごとに「足りていない報酬」を数える。 */
+function countFor(
+  kind: Exclude<NeedFilter, 'off'>,
+  relic: Relic,
+  catalog: Catalog,
+  mine: StatusMap,
+  squad: { states: StatusMap }[],
+): number {
+  switch (kind) {
+    case 'mine':
+      // 見比べる相手を空にすれば、自分だけを見たことになる
+      return anyoneNeedsCount(relic, catalog, mine, [])
+    case 'anyone':
+      return anyoneNeedsCount(relic, catalog, mine, squad)
+    case 'untouched':
+      return untouchedRewardCount(relic, catalog, mine, squad)
+  }
 }
 
 export function RelicListScreen() {
@@ -37,18 +68,13 @@ export function RelicListScreen() {
   const [vaultedOnly, setVaultedOnly] = useState(false)
   const [need, setNeed] = useState<NeedFilter>('off')
 
-  // ルームから出たら、人と見比べる絞り込みは意味がないので外す
-  const activeNeed: NeedFilter = inRoom ? need : 'off'
+  // ルームから出たら、人と見比べる絞り込みは意味がないので自分だけの見方に戻す
+  const activeNeed: NeedFilter = inRoom || need === 'mine' ? need : 'off'
 
   const results = useMemo(() => {
     const matched = catalog.searchRelics(query, tier, vaultedOnly)
-    if (activeNeed === 'untouched') {
-      return matched.filter((relic) => untouchedRewardCount(relic, catalog, states, squad) > 0)
-    }
-    if (activeNeed === 'anyone') {
-      return matched.filter((relic) => anyoneNeedsCount(relic, catalog, states, squad) > 0)
-    }
-    return matched
+    if (activeNeed === 'off') return matched
+    return matched.filter((relic) => countFor(activeNeed, relic, catalog, states, squad) > 0)
   }, [catalog, query, tier, vaultedOnly, activeNeed, states, squad])
 
   return (
@@ -71,37 +97,32 @@ export function RelicListScreen() {
           </button>
         </div>
 
-        {inRoom && (
-          <div className="chips">
+        <div className="chips">
+          {(inRoom ? (['mine', 'untouched', 'anyone'] as const) : (['mine'] as const)).map((kind) => (
             <button
+              key={kind}
               type="button"
-              aria-pressed={need === 'untouched'}
-              onClick={() => setNeed(need === 'untouched' ? 'off' : 'untouched')}
-              title="自分も分隊のみんなも、まだ 1 個も持っていない報酬が入っているレリック"
+              aria-pressed={need === kind}
+              onClick={() => setNeed(need === kind ? 'off' : kind)}
+              title={FILTER_HINT[kind]}
             >
-              {FILTER_LABEL.untouched}
+              {FILTER_LABEL[kind]}
             </button>
-            <button
-              type="button"
-              aria-pressed={need === 'anyone'}
-              onClick={() => setNeed(need === 'anyone' ? 'off' : 'anyone')}
-              title="自分か分隊の誰か 1 人でも、まだ足りていない報酬が入っているレリック"
-            >
-              {FILTER_LABEL.anyone}
-            </button>
-          </div>
-        )}
+          ))}
+        </div>
 
         {results.length === 0 ? (
           <Empty
             glyph={<BoxIcon size={44} />}
             title={activeNeed === 'off' ? '見つかりません' : '当てはまるレリックがありません'}
             description={
-              activeNeed === 'untouched'
-                ? 'この条件だと、みんなが揃って持っていない報酬を含むレリックはありません。'
-                : activeNeed === 'anyone'
-                  ? 'この条件だと、誰かが必要としている報酬を含むレリックはありません。'
-                  : 'レリック名（Lith A1）か、報酬のパーツ名で探せます。'
+              activeNeed === 'mine'
+                ? 'この条件だと、自分にまだ足りていない報酬を含むレリックはありません。'
+                : activeNeed === 'untouched'
+                  ? 'この条件だと、みんなが揃って持っていない報酬を含むレリックはありません。'
+                  : activeNeed === 'anyone'
+                    ? 'この条件だと、誰かが必要としている報酬を含むレリックはありません。'
+                    : 'レリック名（Lith A1）か、報酬のパーツ名で探せます。'
             }
           />
         ) : (
@@ -129,13 +150,9 @@ function RelicRow({ relic, need, onClick }: { relic: Relic; need: NeedFilter; on
 
   // 絞り込んでいるときは、その基準の数を出したほうが分かりやすい
   const trailing = (() => {
-    if (need === 'untouched') {
-      const count = untouchedRewardCount(relic, catalog, states, squad)
-      return { text: `全員 ${count}`, done: count === 0 }
-    }
-    if (need === 'anyone') {
-      const count = anyoneNeedsCount(relic, catalog, states, squad)
-      return { text: `誰か ${count}`, done: count === 0 }
+    if (need === 'untouched' || need === 'anyone') {
+      const count = countFor(need, relic, catalog, states, squad)
+      return { text: `${need === 'untouched' ? '全員' : '誰か'} ${count}`, done: count === 0 }
     }
     const tracked = relic.rewards
       .map((r) => catalog.part(r.partID))
