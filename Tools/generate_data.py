@@ -217,12 +217,14 @@ def assign_stable_indices(parts, previous_paths):
             added += 1
     if known:
         print(f"  パーツ番号: 既存 {len(known)} 件を引き継ぎ、新規 {added} 件を追加", file=sys.stderr)
-    return added
+    return known, added
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", help="取得済み JSON を置くディレクトリ")
+    ap.add_argument("--first-run", action="store_true",
+                    help="パーツ番号を新しく振り直す（初回だけ。既存の記録はすべてずれる）")
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--out", nargs="*", default=[
         os.path.join(root, "web", "public", "warframe_data.json"),
@@ -234,7 +236,49 @@ def main():
     items = fetch(ITEMS_URL, args.cache, "prime_meta.json")
 
     data = build(relic_drops, items)
-    assign_stable_indices(data["parts"], args.out)
+    known, added = assign_stable_indices(data["parts"], args.out)
+
+    # パーツ番号は共有データのビット位置そのもの。
+    # 引き継ぎ元が見つからないまま振り直すと、すでに記録してある内容が全部ずれる。
+    if not known and not args.first_run:
+        print(
+            "\n中止: 既存の warframe_data.json が見つからず、パーツ番号を新しく振り直すところでした。\n"
+            "       このまま進めると、みんなが記録した内容がすべてずれます。\n"
+            "       出力先を確認するか、本当に作り直すなら --first-run を付けてください。\n"
+            f"       探した場所: {', '.join(args.out)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # 前回から何が変わったかを見せる
+    before = {}
+    for path in args.out:
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    before = json.load(f)
+                break
+            except (OSError, json.JSONDecodeError):
+                pass
+    if before:
+        old_relics = {r["id"] for r in before.get("relics", [])}
+        new_relics = {r["id"] for r in data["relics"]}
+        old_sets = {s["id"] for s in before.get("sets", [])}
+        new_sets = {s["id"] for s in data["sets"]}
+        print("\n前回からの変化:", file=sys.stderr)
+        for label, added_items, removed_items in (
+            ("レリック", new_relics - old_relics, old_relics - new_relics),
+            ("セット", new_sets - old_sets, old_sets - new_sets),
+        ):
+            if added_items:
+                print(f"  + {label} {len(added_items)} 件: {', '.join(sorted(added_items)[:8])}"
+                      + (" …" if len(added_items) > 8 else ""), file=sys.stderr)
+            if removed_items:
+                print(f"  - {label} {len(removed_items)} 件: {', '.join(sorted(removed_items)[:8])}"
+                      + (" …" if len(removed_items) > 8 else ""), file=sys.stderr)
+        if not (new_relics - old_relics) and not (old_relics - new_relics) \
+           and not (new_sets - old_sets) and not (old_sets - new_sets):
+            print("  レリックとセットに増減なし（Vaulted 状態や確率は変わっているかもしれない）", file=sys.stderr)
 
     print(file=sys.stderr)
     for out in args.out:
@@ -247,4 +291,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
