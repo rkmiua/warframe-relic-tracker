@@ -1,0 +1,13 @@
+.DS_Store
+
+# Web
+node_modules/
+web/dist/
+.env
+.env.local
+*.local
+
+# Xcode
+**/xcuserdata/
+**/DerivedData/
+*.xcworkspace/xcuserdata/
