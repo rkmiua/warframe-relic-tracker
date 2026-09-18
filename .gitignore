@@ -11,3 +11,6 @@ web/dist/
 **/xcuserdata/
 **/DerivedData/
 *.xcworkspace/xcuserdata/
+
+# TypeScript のビルドキャッシュ
+*.tsbuildinfo
