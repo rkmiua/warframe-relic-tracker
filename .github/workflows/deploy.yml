@@ -80,10 +80,27 @@ jobs:
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
+      # 配信の権限は、サービスアカウントか CI トークンのどちらかで渡す。
+      # サービスアカウント（FIREBASE_SERVICE_ACCOUNT）があればそちらを優先する。
+      # 無ければ firebase login:ci で作ったトークンを使う。
+      # firebase.json の "public": "web/dist" はリポジトリの根からの道なので、
+      # ここでは移動せずに根のまま実行する
       - name: 配信する
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WARFRAME_RELIC_TRACKER_CE330 }}
-          channelId: live
-          projectId: warframe-relic-tracker-ce330
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WARFRAME_RELIC_TRACKER_CE330 }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/service-account.json"
+            export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/service-account.json"
+            unset FIREBASE_TOKEN
+            echo "サービスアカウントで配信します"
+          elif [ -n "$FIREBASE_TOKEN" ]; then
+            echo "CI トークンで配信します"
+          else
+            echo "::error::配信の権限がありません。FIREBASE_TOKEN か FIREBASE_SERVICE_ACCOUNT_WARFRAME_RELIC_TRACKER_CE330 を Secrets に入れてください（README 参照）"
+            exit 1
+          fi
+          ./web/node_modules/.bin/firebase deploy --only hosting \
+            --project warframe-relic-tracker-ce330 \
+            --non-interactive
