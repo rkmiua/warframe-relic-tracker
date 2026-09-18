@@ -11,6 +11,9 @@ service cloud.firestore {
                    && request.auth.uid == uid
                    && request.resource.data.seed is string
                    && request.resource.data.seed.size() < 4000;
+      // 削除のときは request.resource.data が空になるので、上の write では許可されない。
+      // 記録を消せなくなってしまうため、別に書いておく。
+      allow delete: if request.auth != null && request.auth.uid == uid;
     }
 
     match /rooms/{room}/members/{member} {
