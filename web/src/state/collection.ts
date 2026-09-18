@@ -1,5 +1,5 @@
 import type { Catalog } from '../data/catalog'
-import { CRAFTED, NOT_OWNED, OWNED, type Part, type Relic, type Status } from '../data/types'
+import { CRAFTED, NOT_OWNED, ownedCount, stillNeeded, type Part, type Relic, type Status } from '../data/types'
 import type { StatusMap } from './seed'
 
 const STORAGE_KEY = 'relic-vault.collection.v1'
@@ -17,7 +17,7 @@ export function loadCollection(): StatusMap {
       if (!Array.isArray(entry) || entry.length !== 2) continue
       const [index, status] = entry as [unknown, unknown]
       if (typeof index !== 'number' || typeof status !== 'number') continue
-      if (status === OWNED || status === CRAFTED) states.set(index, status)
+      if (status > NOT_OWNED && status <= CRAFTED) states.set(index, status as Status)
     }
     return states
   } catch {
@@ -67,9 +67,12 @@ export function progressOf(partIDs: string[], catalog: Catalog, states: StatusMa
   let crafted = 0
   let owned = 0
   for (const id of partIDs) {
-    const status = statusOf(states, catalog.part(id))
+    const part = catalog.part(id)
+    if (!part) continue
+    const status = statusOf(states, part)
     if (status === CRAFTED) crafted++
-    else if (status === OWNED) owned++
+    // 必要数に届いていなくても、1 個でも持っていれば「所持中」に数える
+    else if (ownedCount(status, part.required) > 0) owned++
   }
   return { crafted, owned, total: partIDs.length }
 }
@@ -80,27 +83,15 @@ export const fractionOf = (p: Progress) => (p.total === 0 ? 0 : p.crafted / p.to
 
 
 /**
- * そのレリックに、自分か分隊の誰かがまだ持っていない報酬が入っているか。
+ * そのレリックに「まだ誰も手をつけていない報酬」が入っているか。
+ *
+ * 自分も分隊の全員も 1 個も持っていない報酬のこと。
+ * みんなで開ければ誰が引いても無駄にならないので、回す相手を決めるのに使う。
  *
  * Forma や Kuva のようにセットに属さない報酬は数えない。
- * 消耗品なので常に「未所持」になり、これを数えると全レリックが該当してしまう。
+ * 消耗品なので常に未所持になり、数えると全レリックが該当してしまう。
  */
-export function hasWantedReward(
-  relic: Relic,
-  catalog: Catalog,
-  mine: StatusMap,
-  squad: { states: StatusMap }[],
-): boolean {
-  return relic.rewards.some((reward) => {
-    const part = catalog.part(reward.partID)
-    if (!part || !part.setID) return false
-    if (statusOf(mine, part) === NOT_OWNED) return true
-    return squad.some((member) => statusOf(member.states, part) === NOT_OWNED)
-  })
-}
-
-/** そのレリックで、誰か（自分を含む）が欲しがっている報酬の数。 */
-export function wantedRewardCount(
+export function untouchedRewardCount(
   relic: Relic,
   catalog: Catalog,
   mine: StatusMap,
@@ -109,7 +100,50 @@ export function wantedRewardCount(
   return relic.rewards.filter((reward) => {
     const part = catalog.part(reward.partID)
     if (!part || !part.setID) return false
-    if (statusOf(mine, part) === NOT_OWNED) return true
-    return squad.some((member) => statusOf(member.states, part) === NOT_OWNED)
+    if (statusOf(mine, part) !== NOT_OWNED) return false
+    return squad.every((member) => statusOf(member.states, part) === NOT_OWNED)
   }).length
+}
+
+export function hasUntouchedReward(
+  relic: Relic,
+  catalog: Catalog,
+  mine: StatusMap,
+  squad: { states: StatusMap }[],
+): boolean {
+  return untouchedRewardCount(relic, catalog, mine, squad) > 0
+}
+
+/** そのパーツがまだ足りているか（個数まで見る）。 */
+export function needsMore(states: StatusMap, part: Part): boolean {
+  return stillNeeded(statusOf(states, part), part.required)
+}
+
+/**
+ * そのレリックに「分隊の誰か（自分を含む）がまだ足りていない報酬」が何個あるか。
+ *
+ * 全員未所持より広い条件で、1 人でも必要としていれば数える。
+ * 2 個要るパーツは、1 個しか持っていなければ「まだ足りていない」とみなす。
+ */
+export function anyoneNeedsCount(
+  relic: Relic,
+  catalog: Catalog,
+  mine: StatusMap,
+  squad: { states: StatusMap }[],
+): number {
+  return relic.rewards.filter((reward) => {
+    const part = catalog.part(reward.partID)
+    if (!part || !part.setID) return false
+    if (needsMore(mine, part)) return true
+    return squad.some((member) => needsMore(member.states, part))
+  }).length
+}
+
+export function hasAnyoneNeeding(
+  relic: Relic,
+  catalog: Catalog,
+  mine: StatusMap,
+  squad: { states: StatusMap }[],
+): boolean {
+  return anyoneNeedsCount(relic, catalog, mine, squad) > 0
 }

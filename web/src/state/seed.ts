@@ -1,11 +1,14 @@
-import { NOT_OWNED, type Status } from '../data/types'
+import { CRAFTED, NOT_OWNED, type Status } from '../data/types'
 
 /** パーツ番号 → 所持状態。未所持は持たない疎なマップ。 */
 export type StatusMap = Map<number, Status>
 
 const MAGIC = 'RV1'
 const HEADER_BYTES = 3 // [version][slotCount lo][slotCount hi]
-const VERSION = 1
+// v1 は 0=未所持 / 1=所持 / 2=作成済み だった。
+// v2 では 2 個要るパーツを数えられるよう 2=2 個持ち / 3=作成済み に変えている。
+const VERSION = 2
+const LEGACY_VERSION = 1
 
 /**
  * 所持状態を 1 本の文字列にまとめる。
@@ -61,16 +64,19 @@ export async function decodeSeed(seed: string): Promise<DecodedSeed> {
 
   if (bytes.length < HEADER_BYTES) throw new Error('データが壊れています')
   const version = bytes[0]
-  if (version !== VERSION) {
+  if (version !== VERSION && version !== LEGACY_VERSION) {
     throw new Error(`対応していないバージョンです (v${version})`)
   }
+  const legacy = version === LEGACY_VERSION
   const slots = (bytes[1] ?? 0) | ((bytes[2] ?? 0) << 8)
 
   const states: StatusMap = new Map()
   for (let index = 0; index < slots; index++) {
     const byte = bytes[HEADER_BYTES + (index >> 2)]
     if (byte === undefined) break
-    const status = ((byte >> ((index & 0b11) * 2)) & 0b11) as Status
+    let status = ((byte >> ((index & 0b11) * 2)) & 0b11) as Status
+    // v1 の「2 = 作成済み」を v2 の 3 に読み替える
+    if (legacy && status === 2) status = CRAFTED
     if (status !== NOT_OWNED) states.set(index, status)
   }
   return { states, slots }

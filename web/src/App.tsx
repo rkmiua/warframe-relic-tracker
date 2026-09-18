@@ -330,8 +330,11 @@ export function App() {
 
 
   const context = useMemo(
-    () => (catalog ? { catalog, states, setStatus, setMany, members, squad, push } : null),
-    [catalog, states, setStatus, setMany, members, squad, push],
+    () =>
+      catalog
+        ? { catalog, states, setStatus, setMany, members, squad, inRoom: room !== null, push }
+        : null,
+    [catalog, states, setStatus, setMany, members, squad, room, push],
   )
 
   if (loadError) {

@@ -4,14 +4,12 @@ import { SearchIcon } from './icons'
 import { MemberBadges } from './MemberBadges'
 import { SetRow } from './SetScreens'
 import { useApp } from './context'
-import { statusOf } from '../state/collection'
+import { needsMore, statusOf } from '../state/collection'
 import {
-  NOT_OWNED,
-  REFINEMENTS,
-  REFINEMENT_LABELS,
-  STATUS_LABELS,
+  BASE_REFINEMENT,
+  selectableStatuses,
+  statusLabel,
   type Part,
-  type Refinement,
   type Status,
 } from '../data/types'
 
@@ -22,7 +20,7 @@ export function PartSearchScreen() {
 
   const results = useMemo(() => {
     const matched = catalog.searchParts(query)
-    return missingOnly ? matched.filter((p) => statusOf(states, p) === NOT_OWNED) : matched
+    return missingOnly ? matched.filter((part) => needsMore(states, part)) : matched
   }, [catalog, states, query, missingOnly])
 
   return (
@@ -32,7 +30,7 @@ export function PartSearchScreen() {
         <SearchField value={query} onChange={setQuery} placeholder="パーツ名（例: Saryn, Barrel）" />
         <div className="chips">
           <button type="button" aria-pressed={missingOnly} onClick={() => setMissingOnly(!missingOnly)}>
-            未所持のみ
+            足りないものだけ
           </button>
         </div>
 
@@ -59,6 +57,7 @@ export function PartSearchScreen() {
                   </span>
                   <StatusButton
                     status={statusOf(states, part)}
+                    required={part.required}
                     name={part.id}
                     onChange={(next) => setStatus(part, next)}
                   />
@@ -74,8 +73,7 @@ export function PartSearchScreen() {
 
 export function PartDetailScreen({ part, onBack }: { part: Part; onBack: () => void }) {
   const { catalog, states, setStatus, members, push } = useApp()
-  const [refinement, setRefinement] = useState<Refinement>('intact')
-  const sources = useMemo(() => catalog.sources(part.id, refinement), [catalog, part.id, refinement])
+  const sources = useMemo(() => catalog.sources(part.id, BASE_REFINEMENT), [catalog, part.id])
   const set = part.setID ? catalog.set(part.setID) : undefined
   const status = statusOf(states, part)
 
@@ -86,13 +84,12 @@ export function PartDetailScreen({ part, onBack }: { part: Part; onBack: () => v
         <div className="section-title">状態</div>
         <Segmented
           label="状態"
-          value={String(status) as '0' | '1' | '2'}
+          value={String(status)}
           onChange={(value) => setStatus(part, Number(value) as Status)}
-          options={[
-            { value: '0', label: STATUS_LABELS[0] },
-            { value: '1', label: STATUS_LABELS[1] },
-            { value: '2', label: STATUS_LABELS[2] },
-          ]}
+          options={selectableStatuses(part.required).map((value) => ({
+            value: String(value),
+            label: statusLabel(value, part.required),
+          }))}
         />
         {part.required > 1 && (
           <div className="section-footer" style={{ marginTop: -6 }}>
@@ -114,10 +111,14 @@ export function PartDetailScreen({ part, onBack }: { part: Part; onBack: () => v
                         className="trail"
                         style={{
                           color:
-                            memberStatus === 2 ? 'var(--green)' : memberStatus === 1 ? 'var(--orange)' : undefined,
+                            memberStatus === 3
+                              ? 'var(--green)'
+                              : memberStatus > 0
+                                ? 'var(--orange)'
+                                : undefined,
                         }}
                       >
-                        {STATUS_LABELS[memberStatus]}
+                        {statusLabel(memberStatus, part.required)}
                       </span>
                     }
                   >
@@ -139,12 +140,6 @@ export function PartDetailScreen({ part, onBack }: { part: Part; onBack: () => v
         )}
 
         <div className="section-title">入手できるレリック ({sources.length})</div>
-        <Segmented
-          label="精錬"
-          value={refinement}
-          onChange={setRefinement}
-          options={REFINEMENTS.map((r) => ({ value: r, label: REFINEMENT_LABELS[r] }))}
-        />
         <div className="list">
           {sources.map(({ relic, chance }) => (
             <Row

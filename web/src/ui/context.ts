@@ -17,6 +17,8 @@ export interface AppContextValue {
   members: Member[]
   /** 表示に使う相手。分隊を選んでいればその人たち、選んでいなければ members と同じ。 */
   squad: Member[]
+  /** ルームに入っているか。人と見比べる機能はこれが真のときだけ出す。 */
+  inRoom: boolean
   push: (route: Route) => void
 }
 

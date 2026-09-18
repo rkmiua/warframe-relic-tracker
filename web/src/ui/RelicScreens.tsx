@@ -1,23 +1,55 @@
 import { useMemo, useState } from 'react'
-import { Empty, NavBar, RarityDot, Row, SearchField, Segmented, StatusButton, TierGlyph, Vaulted, formatChance } from './components'
+import {
+  Empty,
+  NavBar,
+  RarityDot,
+  Row,
+  SearchField,
+  StatusButton,
+  TierGlyph,
+  Vaulted,
+  formatChance,
+} from './components'
 import { BoxIcon } from './icons'
 import { MemberBadges } from './MemberBadges'
 import { useApp } from './context'
-import { collected, hasWantedReward, progressOf, statusOf, wantedRewardCount } from '../state/collection'
-import { REFINEMENTS, REFINEMENT_LABELS, TIERS, type Refinement, type Relic, type RelicTier } from '../data/types'
+import {
+  anyoneNeedsCount,
+  collected,
+  progressOf,
+  statusOf,
+  untouchedRewardCount,
+} from '../state/collection'
+import { BASE_REFINEMENT, TIERS, type Relic, type RelicTier } from '../data/types'
+
+/** 人と見比べる絞り込み。ルームに入っているときだけ使う。 */
+type NeedFilter = 'off' | 'untouched' | 'anyone'
+
+const FILTER_LABEL: Record<Exclude<NeedFilter, 'off'>, string> = {
+  untouched: '全員未所持',
+  anyone: '誰かが未所持',
+}
 
 export function RelicListScreen() {
-  const { catalog, states, squad, push } = useApp()
+  const { catalog, states, squad, inRoom, push } = useApp()
   const [query, setQuery] = useState('')
   const [tier, setTier] = useState<RelicTier | null>(null)
   const [vaultedOnly, setVaultedOnly] = useState(false)
-  const [wantedOnly, setWantedOnly] = useState(false)
+  const [need, setNeed] = useState<NeedFilter>('off')
+
+  // ルームから出たら、人と見比べる絞り込みは意味がないので外す
+  const activeNeed: NeedFilter = inRoom ? need : 'off'
 
   const results = useMemo(() => {
     const matched = catalog.searchRelics(query, tier, vaultedOnly)
-    if (!wantedOnly) return matched
-    return matched.filter((relic) => hasWantedReward(relic, catalog, states, squad))
-  }, [catalog, query, tier, vaultedOnly, wantedOnly, states, squad])
+    if (activeNeed === 'untouched') {
+      return matched.filter((relic) => untouchedRewardCount(relic, catalog, states, squad) > 0)
+    }
+    if (activeNeed === 'anyone') {
+      return matched.filter((relic) => anyoneNeedsCount(relic, catalog, states, squad) > 0)
+    }
+    return matched
+  }, [catalog, query, tier, vaultedOnly, activeNeed, states, squad])
 
   return (
     <>
@@ -37,62 +69,53 @@ export function RelicListScreen() {
           <button type="button" aria-pressed={vaultedOnly} onClick={() => setVaultedOnly(!vaultedOnly)}>
             Vaulted
           </button>
-          <button
-            type="button"
-            aria-pressed={wantedOnly}
-            onClick={() => setWantedOnly(!wantedOnly)}
-            title="自分か分隊の誰かが、まだ持っていない報酬が入っているレリックだけを出す"
-          >
-            要るものがある
-          </button>
         </div>
+
+        {inRoom && (
+          <div className="chips">
+            <button
+              type="button"
+              aria-pressed={need === 'untouched'}
+              onClick={() => setNeed(need === 'untouched' ? 'off' : 'untouched')}
+              title="自分も分隊のみんなも、まだ 1 個も持っていない報酬が入っているレリック"
+            >
+              {FILTER_LABEL.untouched}
+            </button>
+            <button
+              type="button"
+              aria-pressed={need === 'anyone'}
+              onClick={() => setNeed(need === 'anyone' ? 'off' : 'anyone')}
+              title="自分か分隊の誰か 1 人でも、まだ足りていない報酬が入っているレリック"
+            >
+              {FILTER_LABEL.anyone}
+            </button>
+          </div>
+        )}
 
         {results.length === 0 ? (
           <Empty
             glyph={<BoxIcon size={44} />}
-            title={wantedOnly ? '要るものがありません' : '見つかりません'}
+            title={activeNeed === 'off' ? '見つかりません' : '当てはまるレリックがありません'}
             description={
-              wantedOnly
-                ? 'この条件だと、誰もまだ持っていない報酬を含むレリックはありません。'
-                : 'レリック名（Lith A1）か、報酬のパーツ名で探せます。'
+              activeNeed === 'untouched'
+                ? 'この条件だと、みんなが揃って持っていない報酬を含むレリックはありません。'
+                : activeNeed === 'anyone'
+                  ? 'この条件だと、誰かが必要としている報酬を含むレリックはありません。'
+                  : 'レリック名（Lith A1）か、報酬のパーツ名で探せます。'
             }
           />
         ) : (
           <>
             <div className="section-title">{results.length} 件</div>
             <div className="list">
-              {results.map((relic) => {
-                const progress = progressOf(relic.rewards.map((r) => r.partID), catalog, states)
-                const missing = progress.total - collected(progress)
-                // 分隊がいるときは、自分だけでなく「誰かが欲しい数」を出すほうが役に立つ
-                const wanted = squad.length > 0 ? wantedRewardCount(relic, catalog, states, squad) : null
-                return (
-                  <Row
-                    key={relic.id}
-                    onClick={() => push({ kind: 'relic', id: relic.id })}
-                    chevron
-                    trailing={
-                      wanted !== null ? (
-                        <span className="trail" style={wanted === 0 ? { color: 'var(--green)' } : undefined}>
-                          {wanted === 0 ? '要るものなし' : `要る ${wanted}`}
-                        </span>
-                      ) : (
-                        <span className="trail" style={missing === 0 ? { color: 'var(--green)' } : undefined}>
-                          {missing === 0 ? 'すべて所持' : `未所持 ${missing}`}
-                        </span>
-                      )
-                    }
-                  >
-                    <TierGlyph tier={relic.tier} />
-                    <span className="grow">
-                      <span className="title">
-                        {relic.id}
-                        {relic.vaulted && <Vaulted />}
-                      </span>
-                    </span>
-                  </Row>
-                )
-              })}
+              {results.map((relic) => (
+                <RelicRow
+                  key={relic.id}
+                  relic={relic}
+                  need={activeNeed}
+                  onClick={() => push({ kind: 'relic', id: relic.id })}
+                />
+              ))}
             </div>
           </>
         )}
@@ -101,9 +124,47 @@ export function RelicListScreen() {
   )
 }
 
+function RelicRow({ relic, need, onClick }: { relic: Relic; need: NeedFilter; onClick: () => void }) {
+  const { catalog, states, squad } = useApp()
+
+  // 絞り込んでいるときは、その基準の数を出したほうが分かりやすい
+  const trailing = (() => {
+    if (need === 'untouched') {
+      const count = untouchedRewardCount(relic, catalog, states, squad)
+      return { text: `全員 ${count}`, done: count === 0 }
+    }
+    if (need === 'anyone') {
+      const count = anyoneNeedsCount(relic, catalog, states, squad)
+      return { text: `誰か ${count}`, done: count === 0 }
+    }
+    const progress = progressOf(relic.rewards.map((r) => r.partID), catalog, states)
+    const missing = progress.total - collected(progress)
+    return { text: missing === 0 ? 'すべて所持' : `未所持 ${missing}`, done: missing === 0 }
+  })()
+
+  return (
+    <Row
+      onClick={onClick}
+      chevron
+      trailing={
+        <span className="trail" style={trailing.done ? { color: 'var(--green)' } : undefined}>
+          {trailing.text}
+        </span>
+      }
+    >
+      <TierGlyph tier={relic.tier} />
+      <span className="grow">
+        <span className="title">
+          {relic.id}
+          {relic.vaulted && <Vaulted />}
+        </span>
+      </span>
+    </Row>
+  )
+}
+
 export function RelicDetailScreen({ relic, onBack }: { relic: Relic; onBack: () => void }) {
   const { catalog, states, setStatus, push } = useApp()
-  const [refinement, setRefinement] = useState<Refinement>('intact')
 
   return (
     <>
@@ -114,19 +175,11 @@ export function RelicDetailScreen({ relic, onBack }: { relic: Relic; onBack: () 
         trailing={relic.vaulted ? <Vaulted /> : undefined}
       />
       <div className="content">
-        <Segmented
-          label="精錬"
-          value={refinement}
-          onChange={setRefinement}
-          options={REFINEMENTS.map((r) => ({ value: r, label: REFINEMENT_LABELS[r] }))}
-        />
-
         <div className="section-title">報酬</div>
         <div className="list">
           {relic.rewards.map((reward) => {
             const part = catalog.part(reward.partID)
             if (!part) return null
-            const status = statusOf(states, part)
             return (
               <Row key={reward.partID} onClick={() => push({ kind: 'part', id: part.id })} chevron>
                 <RarityDot rarity={reward.rarity} />
@@ -136,18 +189,21 @@ export function RelicDetailScreen({ relic, onBack }: { relic: Relic; onBack: () 
                     {part.required > 1 && <span className="badge">×{part.required}</span>}
                   </span>
                   <span className="sub">
-                    {reward.rarity} · {formatChance(reward.chance[refinement] ?? 0)}
+                    {reward.rarity} · {formatChance(reward.chance[BASE_REFINEMENT] ?? 0)}
                   </span>
                   <MemberBadges partID={part.id} />
                 </span>
-                <StatusButton status={status} name={part.id} onChange={(next) => setStatus(part, next)} />
+                <StatusButton
+                  status={statusOf(states, part)}
+                  required={part.required}
+                  name={part.id}
+                  onChange={(next) => setStatus(part, next)}
+                />
               </Row>
             )
           })}
         </div>
-        <div className="section-footer">
-          丸をタップすると 未所持 → 所持中 → 作成済み と切り替わります。
-        </div>
+        <div className="section-footer">丸をタップすると持ち具合が一段ずつ進みます。</div>
       </div>
     </>
   )

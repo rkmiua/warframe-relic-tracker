@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { BackIcon, ChevronIcon, LockIcon, SearchIcon, StatusIcon } from './icons'
 import type { Rarity, RelicTier, Status } from '../data/types'
-import { STATUS_LABELS, nextStatus } from '../data/types'
+import { CRAFTED, nextStatus, ownedCount, statusLabel } from '../data/types'
 
 export function NavBar({
   title,
@@ -91,29 +91,42 @@ export function Segmented<T extends string>({
   )
 }
 
-/** タップするたびに 未所持 → 所持中 → 作成済み と巡回する。 */
+/**
+ * タップするたびに一段ずつ進むボタン。
+ * 2 個要るパーツでは、いくつ持っているかを数字で添える。
+ */
 export function StatusButton({
   status,
   onChange,
   name,
+  required = 1,
 }: {
   status: Status
   onChange: (status: Status) => void
   name: string
+  required?: number
 }) {
+  const label = statusLabel(status, required)
+  const showCount = required > 1 && status !== CRAFTED
   return (
     <button
       type="button"
-      className="status"
-      data-status={status}
-      aria-label={`${name} の状態: ${STATUS_LABELS[status]}`}
-      title={STATUS_LABELS[status]}
+      className="status-button"
+      aria-label={`${name} の状態: ${label}`}
+      title={label}
       onClick={(e) => {
         e.stopPropagation()
-        onChange(nextStatus(status))
+        onChange(nextStatus(status, required))
       }}
     >
-      <StatusIcon status={status} />
+      <span className="status" data-status={status}>
+        <StatusIcon status={status} />
+      </span>
+      {showCount && (
+        <span className="status-count">
+          {ownedCount(status, required)}/{required}
+        </span>
+      )}
     </button>
   )
 }
@@ -173,7 +186,6 @@ const TIER_COLOR: Record<RelicTier, string> = {
   Meso: 'var(--gray)',
   Neo: 'var(--yellow)',
   Axi: 'var(--accent)',
-  Requiem: 'var(--purple)',
   Vanguard: 'var(--teal)',
 }
 

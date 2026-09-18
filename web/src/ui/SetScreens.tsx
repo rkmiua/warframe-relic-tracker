@@ -149,6 +149,7 @@ export function SetDetailScreen({ set, onBack }: { set: PrimeSet; onBack: () => 
               </span>
               <StatusButton
                 status={statusOf(states, part)}
+                required={part.required}
                 name={part.id}
                 onChange={(next) => setStatus(part, next)}
               />

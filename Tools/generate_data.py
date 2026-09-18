@@ -27,7 +27,9 @@ ITEMS_URL = "https://api.warframestat.us/items/?only=name,vaulted,components,cat
 
 STATES = ["Intact", "Exceptional", "Flawless", "Radiant"]
 STATE_KEYS = {"Intact": "intact", "Exceptional": "exceptional", "Flawless": "flawless", "Radiant": "radiant"}
-TIER_ORDER = ["Lith", "Meso", "Neo", "Axi", "Requiem", "Vanguard"]
+TIER_ORDER = ["Lith", "Meso", "Neo", "Axi", "Vanguard"]
+# Requiem レリックは中身が Requiem Mod や Kuva で、Prime パーツ集めとは別の話なので載せない
+EXCLUDED_TIERS = {"Requiem"}
 ROMAN = {"I": 1, "II": 2, "III": 3, "IV": 4}
 
 
@@ -109,6 +111,8 @@ def build(relic_drops, items):
         # 上流データにまれに名前の無い壊れたレコードが混ざるので落とす
         if state not in STATE_KEYS or not relic.get("relicName") or not relic.get("tier"):
             skipped += 1
+            continue
+        if relic["tier"] in EXCLUDED_TIERS:
             continue
         relic_id = f"{relic['tier']} {relic['relicName']}"
         entry = meta.setdefault(relic_id, {

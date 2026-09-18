@@ -74,9 +74,9 @@ export const EllipsisIcon = ({ size = 20 }: IconProps) => (
   </svg>
 )
 
-/** 未所持・所持中・作成済みを表す 3 つの形。 */
-export const StatusIcon = ({ status, size = 22 }: { status: 0 | 1 | 2; size?: number }) => {
-  if (status === 2) {
+/** 未所持・1 個・2 個・作成済みを表す 4 つの形。 */
+export const StatusIcon = ({ status, size = 22 }: { status: 0 | 1 | 2 | 3; size?: number }) => {
+  if (status === 3) {
     return (
       <svg {...base(size)} aria-hidden="true">
         <circle cx="12" cy="12" r="9.2" fill="currentColor" stroke="none" />
@@ -84,7 +84,17 @@ export const StatusIcon = ({ status, size = 22 }: { status: 0 | 1 | 2; size?: nu
       </svg>
     )
   }
+  if (status === 2) {
+    // 2 個持ち: ほとんど埋まっている
+    return (
+      <svg {...base(size)} aria-hidden="true">
+        <circle cx="12" cy="12" r="6" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="9.2" />
+      </svg>
+    )
+  }
   if (status === 1) {
+    // 1 個持ち: 半分
     return (
       <svg {...base(size)} aria-hidden="true">
         <path d="M12 2.8a9.2 9.2 0 0 0 0 18.4z" fill="currentColor" stroke="none" />
