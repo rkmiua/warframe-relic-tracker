@@ -165,3 +165,5 @@ textarea.field { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fo
 .person { font-size: 11px; padding: 1px 7px; border-radius: 20px; border: 1px solid var(--separator); color: var(--secondary); }
 .person[data-has='1'] { border-color: transparent; background: var(--orange); color: #fff; }
 .person[data-has='2'] { border-color: transparent; background: var(--green); color: #fff; }
+/* 全員が持っているときは、目を引かない控えめな表示にする */
+.person[data-has='all'] { border-color: transparent; background: transparent; color: var(--green); padding-left: 0; }

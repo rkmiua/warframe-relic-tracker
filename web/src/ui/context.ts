@@ -15,6 +15,8 @@ export interface AppContextValue {
   setStatus: (part: Part, status: Status) => void
   setMany: (partIDs: string[], status: Status) => void
   members: Member[]
+  /** 表示に使う相手。分隊を選んでいればその人たち、選んでいなければ members と同じ。 */
+  squad: Member[]
   push: (route: Route) => void
 }
 

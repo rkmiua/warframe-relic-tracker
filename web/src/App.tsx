@@ -5,6 +5,7 @@ import { loadCollection, saveCollection, withStatus } from './state/collection'
 import { decodeSeed, encodeSeed, type StatusMap } from './state/seed'
 import { loadMembers, loadMyName, saveMembers, saveMyName, type Member } from './state/members'
 import { generateRoomCode, joinRoom, type RoomHandle } from './state/sync'
+import { loadSquad, saveSquad, toggleSquad } from './state/squad'
 import { AppContext, type Route } from './ui/context'
 import { BoxIcon, GridIcon, PeopleIcon, SearchIcon } from './ui/icons'
 import { Empty } from './ui/components'
@@ -32,6 +33,7 @@ export function App() {
   const [seedMembers, setSeedMembers] = useState<Member[]>(loadMembers)
   const [roomMembers, setRoomMembers] = useState<Member[]>([])
   const [myName, setMyName] = useState(loadMyName)
+  const [squadIDs, setSquadIDs] = useState<string[]>(loadSquad)
   const [mySeed, setMySeed] = useState('')
 
   const [room, setRoom] = useState<{ code: string; handle: RoomHandle } | null>(null)
@@ -55,6 +57,7 @@ export function App() {
   useEffect(() => saveCollection(states), [states])
   useEffect(() => saveMembers(seedMembers), [seedMembers])
   useEffect(() => saveMyName(myName), [myName])
+  useEffect(() => saveSquad(squadIDs), [squadIDs])
 
   // 自分の共有コードは、状態が変わるたびに作り直す
   useEffect(() => {
@@ -157,6 +160,12 @@ export function App() {
 
   const members = useMemo(() => [...roomMembers, ...seedMembers], [roomMembers, seedMembers])
 
+  // 分隊を選んでいればその人たちだけを見る。選んでいなければ全員。
+  const squad = useMemo(() => {
+    const picked = squadIDs.map((id) => members.find((m) => m.id === id)).filter((m): m is Member => !!m)
+    return picked.length > 0 ? picked : members
+  }, [members, squadIDs])
+
   const importSeed = useCallback(async (seed: string, name: string) => {
     const { states: imported } = await decodeSeed(seed)
     setSeedMembers((current) => [
@@ -166,8 +175,8 @@ export function App() {
   }, [])
 
   const context = useMemo(
-    () => (catalog ? { catalog, states, setStatus, setMany, members, push } : null),
-    [catalog, states, setStatus, setMany, members, push],
+    () => (catalog ? { catalog, states, setStatus, setMany, members, squad, push } : null),
+    [catalog, states, setStatus, setMany, members, squad, push],
   )
 
   if (loadError) {
@@ -220,7 +229,12 @@ export function App() {
             mySeed={mySeed}
             members={members}
             onImportSeed={importSeed}
-            onRemoveMember={(id) => setSeedMembers((current) => current.filter((m) => m.id !== id))}
+            onRemoveMember={(id) => {
+              setSeedMembers((current) => current.filter((m) => m.id !== id))
+              setSquadIDs((current) => current.filter((x) => x !== id))
+            }}
+            squadIDs={squadIDs}
+            onToggleSquad={(id) => setSquadIDs((current) => toggleSquad(current, id))}
             roomCode={room?.code ?? null}
             roomError={roomError}
             connecting={connecting}

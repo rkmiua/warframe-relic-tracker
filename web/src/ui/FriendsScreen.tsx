@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Empty, NavBar, Row } from './components'
-import { PeopleIcon } from './icons'
+import { PeopleIcon, StatusIcon } from './icons'
 import type { Member } from '../state/members'
 import { isValidRoomCode, normalizeRoomCode } from '../state/sync'
 import { isConfiguredByEnv, loadFirebaseConfig, parseConfig, saveFirebaseConfig } from '../state/firebaseConfig'
+import { SQUAD_LIMIT } from '../state/squad'
 
 export interface FriendsScreenProps {
   myName: string
@@ -12,6 +13,8 @@ export interface FriendsScreenProps {
   members: Member[]
   onImportSeed: (seed: string, name: string) => Promise<void>
   onRemoveMember: (id: string) => void
+  squadIDs: string[]
+  onToggleSquad: (id: string) => void
   roomCode: string | null
   roomError: string | null
   connecting: boolean
@@ -68,6 +71,63 @@ export function FriendsScreen(props: FriendsScreenProps) {
             onChange={(e) => props.onChangeName(e.target.value)}
           />
         </div>
+
+        <div className="section-title">みんな ({props.members.length})</div>
+        {props.members.length > SQUAD_LIMIT && (
+          <div className="section-footer" style={{ marginTop: 0, marginBottom: 8 }}>
+            一緒に回る人を {SQUAD_LIMIT} 人まで選ぶと、レリックの報酬にはその人たちの分だけ出ます。
+          </div>
+        )}
+        {props.members.length === 0 ? (
+          <Empty
+            glyph={<PeopleIcon size={44} />}
+            title="まだ誰もいません"
+            description="ルームに参加するか、共有コードを取り込むと、ここに並びます。"
+          />
+        ) : (
+          <div className="list">
+            {props.members.map((member) => (
+              <Row
+                key={member.id}
+                onClick={() => props.onToggleSquad(member.id)}
+                trailing={
+                  member.source === 'seed' ? (
+                    <button
+                      type="button"
+                      style={{ color: 'var(--red)', fontSize: 15 }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        props.onRemoveMember(member.id)
+                      }}
+                    >
+                      削除
+                    </button>
+                  ) : (
+                    <span className="trail" style={{ color: 'var(--green)' }}>
+                      同期中
+                    </span>
+                  )
+                }
+              >
+                <span
+                  className="status"
+                  data-status={props.squadIDs.includes(member.id) ? 2 : 0}
+                  aria-label={props.squadIDs.includes(member.id) ? '分隊にいる' : '分隊にいない'}
+                >
+                  <StatusIcon status={props.squadIDs.includes(member.id) ? 2 : 0} />
+                </span>
+                <span className="grow">
+                  <span className="title">{member.name}</span>
+                  <span className="sub">
+                    {member.source === 'room' ? 'ルーム' : '共有コード'} ·{' '}
+                    {member.states.size} パーツ記録済み
+                  </span>
+                </span>
+              </Row>
+            ))}
+          </div>
+        )}
+
 
         <div className="card">
           <h2>ルームで同期</h2>
@@ -169,45 +229,6 @@ export function FriendsScreen(props: FriendsScreenProps) {
           {seedError && <p className="error">{seedError}</p>}
         </div>
 
-        <div className="section-title">みんな ({props.members.length})</div>
-        {props.members.length === 0 ? (
-          <Empty
-            glyph={<PeopleIcon size={44} />}
-            title="まだ誰もいません"
-            description="ルームに参加するか、共有コードを取り込むと、ここに並びます。"
-          />
-        ) : (
-          <div className="list">
-            {props.members.map((member) => (
-              <Row
-                key={member.id}
-                trailing={
-                  member.source === 'seed' ? (
-                    <button
-                      type="button"
-                      style={{ color: 'var(--red)', fontSize: 15 }}
-                      onClick={() => props.onRemoveMember(member.id)}
-                    >
-                      削除
-                    </button>
-                  ) : (
-                    <span className="trail" style={{ color: 'var(--green)' }}>
-                      同期中
-                    </span>
-                  )
-                }
-              >
-                <span className="grow">
-                  <span className="title">{member.name}</span>
-                  <span className="sub">
-                    {member.source === 'room' ? 'ルーム' : '共有コード'} ·{' '}
-                    {member.states.size} パーツ記録済み
-                  </span>
-                </span>
-              </Row>
-            ))}
-          </div>
-        )}
       </div>
     </>
   )
