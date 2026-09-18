@@ -69,10 +69,50 @@ export async function watchAccount(onChange: (account: Account | null) => void):
  * 別の端末で先に同じ Google アカウントを使っていたときは結びつけられないので、
  * 先にあるアカウントの方へサインインし直す（そちらのデータが正となる）。
  */
+const REDIRECT_FLAG = 'relic-vault.redirecting.v1'
+
+/** ポップアップが使えない環境（ブロックされている、モバイルの一部）ではページ遷移で行う。 */
+async function fallbackToRedirect(): Promise<never> {
+  const { auth } = await getFirebase()
+  const { GoogleAuthProvider, signInWithRedirect } = await import('firebase/auth')
+  try {
+    sessionStorage.setItem(REDIRECT_FLAG, '1')
+  } catch {
+    // 使えなくても遷移自体はできる
+  }
+  await signInWithRedirect(auth, new GoogleAuthProvider())
+  // ここには戻ってこない（ページが移動する）
+  return new Promise<never>(() => undefined)
+}
+
+/**
+ * ページ遷移でログインして戻ってきた場合の結果を拾う。
+ * アプリの起動時に一度だけ呼ぶ。
+ */
+export async function resumeRedirectSignIn(): Promise<Account | null> {
+  let pending = false
+  try {
+    pending = sessionStorage.getItem(REDIRECT_FLAG) === '1'
+    sessionStorage.removeItem(REDIRECT_FLAG)
+  } catch {
+    pending = false
+  }
+  if (!pending) return null
+  const { auth } = await getFirebase()
+  const { getRedirectResult } = await import('firebase/auth')
+  const credential = await getRedirectResult(auth)
+  return credential ? toAccount(credential.user) : null
+}
+
 export async function signInWithGoogle(): Promise<{ account: Account; keptLocalData: boolean }> {
   const { auth } = await getFirebase()
   const { GoogleAuthProvider, linkWithPopup, signInWithPopup } = await import('firebase/auth')
   const provider = new GoogleAuthProvider()
+
+  const popupUnavailable = (error: unknown) => {
+    const code = (error as { code?: string }).code
+    return code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment'
+  }
 
   const current = auth.currentUser
   if (current?.isAnonymous) {
@@ -85,6 +125,7 @@ export async function signInWithGoogle(): Promise<{ account: Account; keptLocalD
         code === 'auth/credential-already-in-use' ||
         code === 'auth/email-already-in-use' ||
         code === 'auth/account-exists-with-different-credential'
+      if (popupUnavailable(error)) return fallbackToRedirect()
       if (!alreadyUsed) throw error
       // すでにそのアカウントが使われている = 別の端末で先に作ってある。そちらへ入る。
       const credential = await signInWithPopup(auth, provider)
@@ -92,8 +133,25 @@ export async function signInWithGoogle(): Promise<{ account: Account; keptLocalD
     }
   }
 
-  const credential = await signInWithPopup(auth, provider)
-  return { account: toAccount(credential.user), keptLocalData: false }
+  try {
+    const credential = await signInWithPopup(auth, provider)
+    return { account: toAccount(credential.user), keptLocalData: false }
+  } catch (error) {
+    if (popupUnavailable(error)) return fallbackToRedirect()
+    throw error
+  }
+}
+
+/** いま誰としてログインしているかを一度だけ調べる。 */
+export async function currentAccount(): Promise<Account | null> {
+  const { auth } = await getFirebase()
+  const { onIdTokenChanged } = await import('firebase/auth')
+  return new Promise((resolve) => {
+    const stop = onIdTokenChanged(auth, (user) => {
+      stop()
+      resolve(user ? toAccount(user) : null)
+    })
+  })
 }
 
 /** ログアウトすると、また匿名の誰かとして扱われる。 */

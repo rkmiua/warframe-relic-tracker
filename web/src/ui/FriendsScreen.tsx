@@ -20,6 +20,7 @@ export interface FriendsScreenProps {
   onLeaveRoom: () => void
   onCreateRoom: () => void
   account: Account | null
+  accountReady: boolean
   authError: string | null
   signingIn: boolean
   onSignIn: () => void
@@ -64,7 +65,9 @@ export function FriendsScreen(props: FriendsScreenProps) {
         {hasConfig && (
           <div className="card">
             <h2>端末をまたいで使う</h2>
-            {props.account && !props.account.isAnonymous ? (
+            {!props.accountReady ? (
+              <p className="note" style={{ marginTop: 0 }}>確認しています…</p>
+            ) : props.account && !props.account.isAnonymous ? (
               <>
                 <p className="note" style={{ marginTop: 0 }}>
                   <strong>{props.account.name ?? 'Google アカウント'}</strong> でログイン中。

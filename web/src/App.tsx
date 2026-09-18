@@ -5,7 +5,14 @@ import { loadCollection, loadUpdatedAt, saveCollection, withStatus } from './sta
 import { encodeSeed, type StatusMap } from './state/seed'
 import { loadMyName, saveMyName, type Member } from './state/members'
 import { generateRoomCode, joinRoom, type RoomHandle } from './state/sync'
-import { describeAuthError, signInWithGoogle, signOutAccount, watchAccount, type Account } from './state/firebase'
+import {
+  describeAuthError,
+  resumeRedirectSignIn,
+  signInWithGoogle,
+  signOutAccount,
+  watchAccount,
+  type Account,
+} from './state/firebase'
 import { watchMyData, type PersonalSync } from './state/personalSync'
 import { loadFirebaseConfig } from './state/firebaseConfig'
 import { loadSquad, saveSquad, toggleSquad } from './state/squad'
@@ -36,6 +43,7 @@ export function App() {
   // この端末で最後に変更した時刻。端末間でどちらを採るかの判断に使う
   const updatedAt = useRef<number>(loadUpdatedAt())
   const [account, setAccount] = useState<Account | null>(null)
+  const [accountReady, setAccountReady] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const [signingIn, setSigningIn] = useState(false)
   const personal = useRef<PersonalSync | null>(null)
@@ -176,18 +184,38 @@ export function App() {
 
   // ログイン状態を見張る。設定が無ければ何もしない（ローカルだけで動く）
   useEffect(() => {
-    if (!loadFirebaseConfig()) return
+    if (!loadFirebaseConfig()) {
+      setAccountReady(true)
+      return
+    }
     let stop: (() => void) | undefined
     let cancelled = false
-    void watchAccount((next) => {
-      if (!cancelled) setAccount(next)
-    }).then(
-      (unsubscribe) => {
-        if (cancelled) unsubscribe()
-        else stop = unsubscribe
-      },
-      () => undefined,
-    )
+    // ページ遷移でログインして戻ってきた場合の結果を先に拾う
+    void resumeRedirectSignIn()
+      .then((returned) => {
+        if (returned && !cancelled) setAccount(returned)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setAuthError(describeAuthError(error))
+      })
+      .finally(() => {
+        if (cancelled) return
+        void watchAccount((next) => {
+          if (cancelled) return
+          setAccount(next)
+          setAccountReady(true)
+        }).then(
+          (unsubscribe) => {
+            if (cancelled) unsubscribe()
+            else stop = unsubscribe
+          },
+          (error: unknown) => {
+            if (cancelled) return
+            setAccountReady(true)
+            setAuthError(describeAuthError(error))
+          },
+        )
+      })
     return () => {
       cancelled = true
       stop?.()
@@ -241,8 +269,14 @@ export function App() {
   const logIn = useCallback(() => {
     setSigningIn(true)
     setAuthError(null)
+    // 応答が返らないまま固まると押し直せなくなるので、頃合いを見て諦める
+    const giveUp = setTimeout(() => {
+      setSigningIn(false)
+      setAuthError('ログインの応答がありません。ポップアップがブロックされていないか確かめて、もう一度試してください。')
+    }, 90_000)
     signInWithGoogle().then(
       ({ account: signedIn, keptLocalData }) => {
+        clearTimeout(giveUp)
         setSigningIn(false)
         setAccount(signedIn)
         // すでに別の端末で使っているアカウントに入ったときは、向こうの記録を正とする。
@@ -250,6 +284,7 @@ export function App() {
         if (!keptLocalData) updatedAt.current = 0
       },
       (error: unknown) => {
+        clearTimeout(giveUp)
         setSigningIn(false)
         setAuthError(describeAuthError(error))
       },
@@ -355,6 +390,7 @@ export function App() {
             onLeaveRoom={leaveRoom}
             onCreateRoom={() => connect(generateRoomCode())}
             account={account}
+            accountReady={accountReady}
             authError={authError}
             signingIn={signingIn}
             onSignIn={logIn}
