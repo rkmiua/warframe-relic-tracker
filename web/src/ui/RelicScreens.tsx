@@ -13,13 +13,7 @@ import {
 import { BoxIcon } from './icons'
 import { MemberBadges } from './MemberBadges'
 import { useApp } from './context'
-import {
-  anyoneNeedsCount,
-  collected,
-  progressOf,
-  statusOf,
-  everyoneNeedsCount,
-} from '../state/collection'
+import { anyoneNeedsCount, everyoneNeedsCount, statusOf } from '../state/collection'
 import { BASE_REFINEMENT, TIERS, isTracked, type Relic, type RelicTier } from '../data/types'
 import type { Catalog } from '../data/catalog'
 import type { StatusMap } from '../state/seed'
@@ -148,19 +142,14 @@ export function RelicListScreen() {
 function RelicRow({ relic, need, onClick }: { relic: Relic; need: NeedFilter; onClick: () => void }) {
   const { catalog, states, squad } = useApp()
 
-  // 絞り込んでいるときは、その基準の数を出したほうが分かりやすい
+  // 絞り込みと同じ数え方をする。
+  // 別々に数えると、2 個要るパーツを 1 個持っただけで「すべて所持」になってしまう。
   const trailing = (() => {
-    if (need === 'untouched' || need === 'anyone') {
-      const count = countFor(need, relic, catalog, states, squad)
-      return { text: `${need === 'untouched' ? '全員' : '誰か'} ${count}`, done: count === 0 }
-    }
-    const tracked = relic.rewards
-      .map((r) => catalog.part(r.partID))
-      .filter((p) => p && isTracked(p))
-      .map((p) => p!.id)
-    const progress = progressOf(tracked, catalog, states)
-    const missing = progress.total - collected(progress)
-    return { text: missing === 0 ? 'すべて所持' : `未所持 ${missing}`, done: missing === 0 }
+    const kind = need === 'off' ? 'mine' : need
+    const count = countFor(kind, relic, catalog, states, squad)
+    if (count === 0) return { text: 'すべて所持', done: true }
+    const label = kind === 'untouched' ? '全員' : kind === 'anyone' ? '誰か' : '未所持'
+    return { text: `${label} ${count}`, done: false }
   })()
 
   return (
