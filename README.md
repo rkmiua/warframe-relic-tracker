@@ -62,6 +62,10 @@ Firebase Firestore の無料枠を使う。相手はログイン不要（匿名�
 
 ### ルーム同期を有効にする
 
+**手順の詳しい版は [docs/firebase-setup.md](docs/firebase-setup.md) にある。**
+この作業をするのはリポジトリの持ち主 1 人だけで、フレンド側は URL を開いて
+6 桁コードを入れるだけでよい（Google アカウントも Firebase も要らない）。
+
 設定しなくても共有コードは使えるので、必要になってからでよい。
 
 1. [Firebase コンソール](https://console.firebase.google.com/) でプロジェクトを作る
