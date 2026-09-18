@@ -2,14 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { Catalog } from '../data/catalog'
 import { anyoneNeedsCount, untouchedRewardCount } from './collection'
 import type { StatusMap } from './seed'
-import {
-  CRAFTED,
-  NOT_OWNED,
-  OWNED_ONE,
-  OWNED_TWO,
-  type MasterData,
-  type Status,
-} from '../data/types'
+import { CRAFTED, OWNED_ONE, OWNED_TWO, type MasterData, type Status } from '../data/types'
 
 // 1 個要るパーツ・2 個要るパーツ・Forma を 1 つずつ持つレリックを組み立てる
 const DATA: MasterData = {
