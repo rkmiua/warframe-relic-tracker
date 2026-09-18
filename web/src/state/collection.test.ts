@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { Catalog } from '../data/catalog'
-import { anyoneNeedsCount, untouchedRewardCount } from './collection'
+import { anyoneNeedsCount, everyoneNeedsCount } from './collection'
 import type { StatusMap } from './seed'
 import { CRAFTED, OWNED_ONE, OWNED_TWO, type MasterData, type Status } from '../data/types'
 
@@ -46,26 +46,41 @@ const BARREL = 1
 const states = (entries: [number, Status][]): StatusMap => new Map(entries)
 const member = (entries: [number, Status][]) => ({ states: states(entries) })
 
-describe('全員未所持（untouchedRewardCount）', () => {
+describe('全員未所持（everyoneNeedsCount）= 全員がまだ揃えていない', () => {
   test('誰も 1 個も持っていなければ、×2 のパーツも数える', () => {
-    expect(untouchedRewardCount(relic, catalog, states([]), [member([])])).toBe(2)
+    expect(everyoneNeedsCount(relic, catalog, states([]), [member([])])).toBe(2)
   })
 
-  test('×2 のパーツを自分が 1 個持っていたら、そのパーツは数えない', () => {
-    const count = untouchedRewardCount(relic, catalog, states([[BARREL, OWNED_ONE]]), [member([])])
-    expect(count).toBe(1) // 設計図だけ
+  test('×2 のパーツを自分が 1 個持っていても、揃っていないので数える', () => {
+    const count = everyoneNeedsCount(relic, catalog, states([[BARREL, OWNED_ONE]]), [member([])])
+    expect(count).toBe(2)
   })
 
-  test('×2 のパーツを相手が 1 個持っていても、そのパーツは数えない', () => {
-    const count = untouchedRewardCount(relic, catalog, states([]), [member([[BARREL, OWNED_ONE]])])
+  test('×2 のパーツを全員が 1 個ずつ持っていても、揃っていないので数える', () => {
+    const count = everyoneNeedsCount(relic, catalog, states([[BARREL, OWNED_ONE]]), [
+      member([[BARREL, OWNED_ONE]]),
+    ])
+    expect(count).toBe(2)
+  })
+
+  test('×2 のパーツが 2 個揃った人がいれば、そのパーツは外れる', () => {
+    const count = everyoneNeedsCount(relic, catalog, states([[BARREL, OWNED_TWO]]), [member([])])
+    expect(count).toBe(1) // 設計図だけ残る
+  })
+
+  test('相手が揃えていれば外れる', () => {
+    const count = everyoneNeedsCount(relic, catalog, states([]), [member([[BARREL, CRAFTED]])])
     expect(count).toBe(1)
   })
 
+  test('×1 のパーツは 1 個持てば外れる', () => {
+    const count = everyoneNeedsCount(relic, catalog, states([[BLUEPRINT, OWNED_ONE]]), [member([])])
+    expect(count).toBe(1) // Barrel だけ残る
+  })
+
   test('Forma は数えない', () => {
-    const count = untouchedRewardCount(relic, catalog, states([[BLUEPRINT, CRAFTED], [BARREL, CRAFTED]]), [
-      member([[BLUEPRINT, CRAFTED], [BARREL, CRAFTED]]),
-    ])
-    expect(count).toBe(0)
+    const done = states([[BLUEPRINT, CRAFTED], [BARREL, CRAFTED]])
+    expect(everyoneNeedsCount(relic, catalog, done, [{ states: done }])).toBe(0)
   })
 })
 
@@ -103,14 +118,23 @@ describe('誰かが未所持（anyoneNeedsCount）', () => {
 })
 
 describe('二つの絞り込みの関係', () => {
-  test('全員未所持は、誰かが未所持に含まれる', () => {
-    const mine = states([[BARREL, OWNED_ONE]])
-    const squad = [member([])]
-    const untouched = untouchedRewardCount(relic, catalog, mine, squad)
-    const anyone = anyoneNeedsCount(relic, catalog, mine, squad)
-    expect(untouched).toBeLessThanOrEqual(anyone)
-    // Barrel は「全員未所持」ではないが、まだ足りていないので「誰かが未所持」には入る
-    expect(untouched).toBe(1)
-    expect(anyone).toBe(2)
+  test('全員未所持は、いつでも誰かが未所持に含まれる', () => {
+    const cases: [StatusMap, { states: StatusMap }[]][] = [
+      [states([]), [member([])]],
+      [states([[BARREL, OWNED_ONE]]), [member([[BARREL, OWNED_ONE]])]],
+      [states([[BARREL, OWNED_TWO]]), [member([])]],
+      [states([[BLUEPRINT, CRAFTED]]), [member([[BARREL, CRAFTED]])]],
+    ]
+    for (const [mine, squad] of cases) {
+      expect(everyoneNeedsCount(relic, catalog, mine, squad))
+        .toBeLessThanOrEqual(anyoneNeedsCount(relic, catalog, mine, squad))
+    }
+  })
+
+  test('片方だけが揃えていない報酬は、誰かが未所持にだけ入る', () => {
+    const mine = states([[BLUEPRINT, CRAFTED], [BARREL, CRAFTED]])
+    const squad = [member([[BLUEPRINT, CRAFTED], [BARREL, OWNED_ONE]])]
+    expect(everyoneNeedsCount(relic, catalog, mine, squad)).toBe(0)
+    expect(anyoneNeedsCount(relic, catalog, mine, squad)).toBe(1)
   })
 })

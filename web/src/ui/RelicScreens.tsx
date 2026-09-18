@@ -18,7 +18,7 @@ import {
   collected,
   progressOf,
   statusOf,
-  untouchedRewardCount,
+  everyoneNeedsCount,
 } from '../state/collection'
 import { BASE_REFINEMENT, TIERS, isTracked, type Relic, type RelicTier } from '../data/types'
 import type { Catalog } from '../data/catalog'
@@ -38,7 +38,7 @@ const FILTER_LABEL: Record<Exclude<NeedFilter, 'off'>, string> = {
 
 const FILTER_HINT: Record<Exclude<NeedFilter, 'off'>, string> = {
   mine: '自分にまだ足りていない報酬が入っているレリック',
-  untouched: '自分も分隊のみんなも、まだ 1 個も持っていない報酬が入っているレリック',
+  untouched: '自分も分隊のみんなも、まだ揃えていない報酬が入っているレリック',
   anyone: '自分か分隊の誰か 1 人でも、まだ足りていない報酬が入っているレリック',
 }
 
@@ -57,7 +57,7 @@ function countFor(
     case 'anyone':
       return anyoneNeedsCount(relic, catalog, mine, squad)
     case 'untouched':
-      return untouchedRewardCount(relic, catalog, mine, squad)
+      return everyoneNeedsCount(relic, catalog, mine, squad)
   }
 }
 
@@ -119,7 +119,7 @@ export function RelicListScreen() {
               activeNeed === 'mine'
                 ? 'この条件だと、自分にまだ足りていない報酬を含むレリックはありません。'
                 : activeNeed === 'untouched'
-                  ? 'この条件だと、みんなが揃って持っていない報酬を含むレリックはありません。'
+                  ? 'この条件だと、みんなが揃えていない報酬を含むレリックはありません。'
                   : activeNeed === 'anyone'
                     ? 'この条件だと、誰かが必要としている報酬を含むレリックはありません。'
                     : 'レリック名（Lith A1）か、報酬のパーツ名で探せます。'

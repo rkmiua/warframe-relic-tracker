@@ -82,16 +82,21 @@ export const isComplete = (p: Progress) => p.total > 0 && p.crafted === p.total
 export const fractionOf = (p: Progress) => (p.total === 0 ? 0 : p.crafted / p.total)
 
 
+/** そのパーツがまだ足りているか（個数まで見る）。 */
+export function needsMore(states: StatusMap, part: Part): boolean {
+  return stillNeeded(statusOf(states, part), part.required)
+}
+
 /**
- * そのレリックに「まだ誰も手をつけていない報酬」が入っているか。
+ * そのレリックに「全員がまだ揃えていない報酬」が何個あるか。
  *
- * 自分も分隊の全員も 1 個も持っていない報酬のこと。
- * みんなで開ければ誰が引いても無駄にならないので、回す相手を決めるのに使う。
+ * 2 個要るパーツは、1 個だけ持っている人がいても「まだ揃っていない」とみなす。
+ * 全員が欲しがっている報酬なので、みんなで開ければ誰が引いても無駄にならない。
  *
- * Forma や Kuva のようにセットに属さない報酬は数えない。
- * 消耗品なので常に未所持になり、数えると全レリックが該当してしまう。
+ * Forma のようにセットに属さない報酬は数えない。
+ * 消耗品なので常に足りず、数えると全レリックが該当してしまう。
  */
-export function untouchedRewardCount(
+export function everyoneNeedsCount(
   relic: Relic,
   catalog: Catalog,
   mine: StatusMap,
@@ -100,23 +105,9 @@ export function untouchedRewardCount(
   return relic.rewards.filter((reward) => {
     const part = catalog.part(reward.partID)
     if (!part || !part.setID) return false
-    if (statusOf(mine, part) !== NOT_OWNED) return false
-    return squad.every((member) => statusOf(member.states, part) === NOT_OWNED)
+    if (!needsMore(mine, part)) return false
+    return squad.every((member) => needsMore(member.states, part))
   }).length
-}
-
-export function hasUntouchedReward(
-  relic: Relic,
-  catalog: Catalog,
-  mine: StatusMap,
-  squad: { states: StatusMap }[],
-): boolean {
-  return untouchedRewardCount(relic, catalog, mine, squad) > 0
-}
-
-/** そのパーツがまだ足りているか（個数まで見る）。 */
-export function needsMore(states: StatusMap, part: Part): boolean {
-  return stillNeeded(statusOf(states, part), part.required)
 }
 
 /**
