@@ -269,6 +269,27 @@ export function App() {
     return () => clearTimeout(timer)
   }, [mySeed])
 
+  /**
+   * ログインやログアウトをすると、人を表す ID が変わることがある。
+   * ルームに入ったまま切り替えると、前の ID で書いた行が残り、
+   * 自分自身が「もう一人の誰か」として見えてしまう。
+   * そこで、いったんルームを出て（自分の行を消して）から入り直す。
+   */
+  const withRoomRejoin = useCallback(
+    (change: () => Promise<unknown>) => {
+      const rejoin = room?.code ?? null
+      if (room) {
+        room.handle.leave()
+        setRoom(null)
+        setMembers([])
+      }
+      return change().finally(() => {
+        if (rejoin) connect(rejoin)
+      })
+    },
+    [room, connect],
+  )
+
   const logIn = useCallback(() => {
     setSigningIn(true)
     setAuthError(null)
@@ -277,27 +298,29 @@ export function App() {
       setSigningIn(false)
       setAuthError('ログインの応答がありません。ポップアップがブロックされていないか確かめて、もう一度試してください。')
     }, 90_000)
-    signInWithGoogle().then(
-      ({ account: signedIn, keptLocalData }) => {
-        clearTimeout(giveUp)
-        setSigningIn(false)
-        setAccount(signedIn)
-        // すでに別の端末で使っているアカウントに入ったときは、向こうの記録を正とする。
-        // そうしないと、2 台目で少し触っただけの内容が 1 台目の記録を上書きしてしまう。
-        if (!keptLocalData) updatedAt.current = 0
-      },
-      (error: unknown) => {
-        clearTimeout(giveUp)
-        setSigningIn(false)
-        setAuthError(describeAuthError(error))
-      },
+    void withRoomRejoin(() =>
+      signInWithGoogle().then(
+        ({ account: signedIn, keptLocalData }) => {
+          clearTimeout(giveUp)
+          setSigningIn(false)
+          setAccount(signedIn)
+          // すでに別の端末で使っているアカウントに入ったときは、向こうの記録を正とする。
+          // そうしないと、2 台目で少し触っただけの内容が 1 台目の記録を上書きしてしまう。
+          if (!keptLocalData) updatedAt.current = 0
+        },
+        (error: unknown) => {
+          clearTimeout(giveUp)
+          setSigningIn(false)
+          setAuthError(describeAuthError(error))
+        },
+      ),
     )
-  }, [])
+  }, [withRoomRejoin])
 
   const logOut = useCallback(() => {
     setAuthError(null)
-    void signOutAccount().catch(() => undefined)
-  }, [])
+    void withRoomRejoin(() => signOutAccount().catch(() => undefined))
+  }, [withRoomRejoin])
 
   // タブと階層ごとにスクロール位置を覚えておく。
   // 覚えないと、別のタブに移ったときに前のタブの位置のままになってしまう。
