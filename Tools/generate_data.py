@@ -19,10 +19,23 @@ import datetime
 import json
 import os
 import re
+import ssl
 import sys
+import time
 import urllib.request
 
 RELIC_DROPS_URL = "https://drops.warframestat.us/data/relics.json"
+# 既定の Python-urllib のままだと 403 で断られる。素性が分かる名前で名乗る
+USER_AGENT = "RelicVault/1.0 (+https://github.com/rkmiua/warframe-relic-tracker)"
+
+
+def ssl_context():
+    """証明書の置き場が分かるなら明示する。分からなければ既定に任せる。"""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return None
 ITEMS_URL = "https://api.warframestat.us/items/?only=name,vaulted,components,category,type,productCategory"
 
 STATES = ["Intact", "Exceptional", "Flawless", "Radiant"]
@@ -51,8 +64,41 @@ def fetch(url: str, cache_dir: str | None, filename: str):
         with open(path) as f:
             return json.load(f)
     print(f"  fetch  {url}", file=sys.stderr)
-    with urllib.request.urlopen(url, timeout=180) as res:
-        raw = res.read()
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    raw = None
+    for attempt in range(1, 4):
+        try:
+            with urllib.request.urlopen(request, timeout=180, context=ssl_context()) as res:
+                raw = res.read()
+            break
+        except urllib.error.HTTPError as e:
+            # 断られ方によっては少し待てば通る
+            if e.code in (403, 429, 500, 502, 503, 504) and attempt < 3:
+                wait = attempt * 5
+                print(f"    {e.code} で断られたので {wait} 秒待って {attempt + 1} 回目を試します", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            raise SystemExit(
+                f"\n取得に失敗しました: {url}\n"
+                f"  HTTP {e.code} {e.reason}\n"
+                f"  相手側が混んでいるか、アクセスを断られています。時間をおいて試してください。"
+            )
+        except urllib.error.URLError as e:
+            # 証明書が見つからないのは待っても直らないので、その場で知らせる
+            if isinstance(e.reason, ssl.SSLCertVerificationError):
+                raise SystemExit(
+                    f"\n取得に失敗しました: {url}\n"
+                    f"  {e.reason}\n"
+                    f"  この Python には証明書の置き場が設定されていません。次のどちらかで直ります。\n"
+                    f"    ・「/Applications/Python 3.x/Install Certificates.command」を実行する\n"
+                    f"    ・pip3 install certifi"
+                )
+            if attempt < 3:
+                print(f"    つながらないので {attempt * 5} 秒待って {attempt + 1} 回目を試します", file=sys.stderr)
+                time.sleep(attempt * 5)
+                continue
+            raise SystemExit(f"\n取得に失敗しました: {url}\n  {e.reason}")
+    assert raw is not None
     if path:
         os.makedirs(cache_dir, exist_ok=True)
         with open(path, "wb") as f:
