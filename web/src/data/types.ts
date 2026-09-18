@@ -38,6 +38,16 @@ export interface Part {
   index: number
 }
 
+/**
+ * 持ち具合を記録する対象か。
+ *
+ * Forma のようにセットに属さない報酬は、何個あっても足りることがない消耗品なので、
+ * 持っているかどうかを覚えても意味がない。報酬としては出すが、記録はしない。
+ */
+export function isTracked(part: Part): boolean {
+  return part.setID !== null
+}
+
 export interface MasterData {
   version: number
   generatedAt: string

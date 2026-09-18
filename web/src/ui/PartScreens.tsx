@@ -7,6 +7,7 @@ import { useApp } from './context'
 import { needsMore, statusOf } from '../state/collection'
 import {
   BASE_REFINEMENT,
+  isTracked,
   selectableStatuses,
   statusLabel,
   type Part,
@@ -19,7 +20,8 @@ export function PartSearchScreen() {
   const [missingOnly, setMissingOnly] = useState(false)
 
   const results = useMemo(() => {
-    const matched = catalog.searchParts(query)
+    // Forma のような消耗品は記録しないので、検索にも出さない
+    const matched = catalog.searchParts(query).filter(isTracked)
     return missingOnly ? matched.filter((part) => needsMore(states, part)) : matched
   }, [catalog, states, query, missingOnly])
 
@@ -38,7 +40,7 @@ export function PartSearchScreen() {
           <Empty
             glyph={<SearchIcon size={44} />}
             title="パーツを検索"
-            description={`Prime の名前やパーツ名で、全 ${catalog.parts.length} 種類から探せます。`}
+            description={`Prime の名前やパーツ名で、全 ${catalog.trackedPartCount} 種類から探せます。`}
           />
         ) : results.length === 0 ? (
           <Empty glyph={<SearchIcon size={44} />} title="見つかりません" description="別の言葉で試してみてください。" />

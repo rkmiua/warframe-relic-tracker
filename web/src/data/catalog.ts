@@ -7,6 +7,8 @@ export class Catalog {
   readonly parts: Part[]
   readonly generatedAt: string
   readonly categories: string[]
+  /** 持ち具合を記録する対象のパーツ数（Forma などの消耗品を除く） */
+  readonly trackedPartCount: number
   /** seed のビット位置の最大値 + 1 */
   readonly partSlots: number
 
@@ -49,6 +51,7 @@ export class Catalog {
 
     this.partSlots = data.parts.reduce((max, p) => Math.max(max, p.index), -1) + 1
     this.categories = [...new Set(data.sets.map((s) => s.category))].sort()
+    this.trackedPartCount = data.parts.filter((p) => p.setID !== null).length
   }
 
   relic(id: string): Relic | undefined {

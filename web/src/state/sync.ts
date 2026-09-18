@@ -1,6 +1,6 @@
 import type { Member } from './members'
 import { decodeSeed, type StatusMap } from './seed'
-import { loadFirebaseConfig } from './firebaseConfig'
+import { getFirebase } from './firebase'
 
 /** 紛らわしい文字（0/O、1/I）を除いたルームコード用の文字。 */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -39,21 +39,14 @@ export interface RoomCallbacks {
  * Firebase SDK は設定があるときだけ読み込む（未設定なら通信もバンドルの読み込みも起きない）。
  */
 export async function joinRoom(code: string, callbacks: RoomCallbacks): Promise<RoomHandle> {
-  const config = loadFirebaseConfig()
-  if (!config) throw new Error('Firebase の設定がありません')
+  const { auth, db } = await getFirebase()
+  const { signInAnonymously } = await import('firebase/auth')
+  const { collection, doc, onSnapshot, setDoc, deleteDoc, serverTimestamp } = await import('firebase/firestore')
 
-  const [{ initializeApp, getApps }, { getAuth, signInAnonymously }, firestore] = await Promise.all([
-    import('firebase/app'),
-    import('firebase/auth'),
-    import('firebase/firestore'),
-  ])
-  const { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, serverTimestamp } = firestore
-
-  const app = getApps()[0] ?? initializeApp(config)
-  const auth = getAuth(app)
-  const credential = await signInAnonymously(auth)
-  const myID = credential.user.uid
-  const db = getFirestore(app)
+  // すでに誰かとして入っているなら、その人のまま使う。
+  // ここで無条件に匿名ログインすると、Google で入っていた人が追い出されてしまう。
+  const user = auth.currentUser ?? (await signInAnonymously(auth)).user
+  const myID = user.uid
 
   const membersRef = collection(db, 'rooms', code, 'members')
   const myRef = doc(membersRef, myID)

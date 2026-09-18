@@ -20,7 +20,7 @@ import {
   statusOf,
   untouchedRewardCount,
 } from '../state/collection'
-import { BASE_REFINEMENT, TIERS, type Relic, type RelicTier } from '../data/types'
+import { BASE_REFINEMENT, TIERS, isTracked, type Relic, type RelicTier } from '../data/types'
 
 /** 人と見比べる絞り込み。ルームに入っているときだけ使う。 */
 type NeedFilter = 'off' | 'untouched' | 'anyone'
@@ -137,7 +137,11 @@ function RelicRow({ relic, need, onClick }: { relic: Relic; need: NeedFilter; on
       const count = anyoneNeedsCount(relic, catalog, states, squad)
       return { text: `誰か ${count}`, done: count === 0 }
     }
-    const progress = progressOf(relic.rewards.map((r) => r.partID), catalog, states)
+    const tracked = relic.rewards
+      .map((r) => catalog.part(r.partID))
+      .filter((p) => p && isTracked(p))
+      .map((p) => p!.id)
+    const progress = progressOf(tracked, catalog, states)
     const missing = progress.total - collected(progress)
     return { text: missing === 0 ? 'すべて所持' : `未所持 ${missing}`, done: missing === 0 }
   })()
@@ -180,8 +184,13 @@ export function RelicDetailScreen({ relic, onBack }: { relic: Relic; onBack: () 
           {relic.rewards.map((reward) => {
             const part = catalog.part(reward.partID)
             if (!part) return null
+            const tracked = isTracked(part)
             return (
-              <Row key={reward.partID} onClick={() => push({ kind: 'part', id: part.id })} chevron>
+              <Row
+                key={reward.partID}
+                onClick={tracked ? () => push({ kind: 'part', id: part.id }) : undefined}
+                chevron={tracked}
+              >
                 <RarityDot rarity={reward.rarity} />
                 <span className="grow">
                   <span className="title">
@@ -191,14 +200,16 @@ export function RelicDetailScreen({ relic, onBack }: { relic: Relic; onBack: () 
                   <span className="sub">
                     {reward.rarity} · {formatChance(reward.chance[BASE_REFINEMENT] ?? 0)}
                   </span>
-                  <MemberBadges partID={part.id} />
+                  {tracked && <MemberBadges partID={part.id} />}
                 </span>
-                <StatusButton
-                  status={statusOf(states, part)}
-                  required={part.required}
-                  name={part.id}
-                  onChange={(next) => setStatus(part, next)}
-                />
+                {tracked && (
+                  <StatusButton
+                    status={statusOf(states, part)}
+                    required={part.required}
+                    name={part.id}
+                    onChange={(next) => setStatus(part, next)}
+                  />
+                )}
               </Row>
             )
           })}
