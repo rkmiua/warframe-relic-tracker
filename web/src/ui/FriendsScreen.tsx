@@ -5,6 +5,7 @@ import type { Member } from '../state/members'
 import { isValidRoomCode, normalizeRoomCode } from '../state/sync'
 import { isConfiguredByEnv, loadFirebaseConfig, parseConfig, saveFirebaseConfig } from '../state/firebaseConfig'
 import { SQUAD_LIMIT } from '../state/squad'
+import type { Account } from '../state/firebase'
 
 export interface FriendsScreenProps {
   myName: string
@@ -18,6 +19,11 @@ export interface FriendsScreenProps {
   onJoinRoom: (code: string) => void
   onLeaveRoom: () => void
   onCreateRoom: () => void
+  account: Account | null
+  authError: string | null
+  signingIn: boolean
+  onSignIn: () => void
+  onSignOut: () => void
 }
 
 export function FriendsScreen(props: FriendsScreenProps) {
@@ -54,6 +60,39 @@ export function FriendsScreen(props: FriendsScreenProps) {
             onChange={(e) => props.onChangeName(e.target.value)}
           />
         </div>
+
+        {hasConfig && (
+          <div className="card">
+            <h2>端末をまたいで使う</h2>
+            {props.account && !props.account.isAnonymous ? (
+              <>
+                <p className="note" style={{ marginTop: 0 }}>
+                  <strong>{props.account.name ?? 'Google アカウント'}</strong> でログイン中。
+                  同じアカウントでログインした端末どうしで、記録が自動的に揃います。
+                </p>
+                <button type="button" style={{ color: 'var(--red)' }} onClick={props.onSignOut}>
+                  ログアウト
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="note" style={{ marginTop: 0 }}>
+                  Google でログインすると、iPhone と iPad など複数の端末で同じ記録を見られます。
+                  今この端末にある記録は引き継がれます。
+                </p>
+                <button
+                  type="button"
+                  style={{ color: 'var(--accent)' }}
+                  disabled={props.signingIn}
+                  onClick={props.onSignIn}
+                >
+                  {props.signingIn ? 'ログインしています…' : 'Google でログイン'}
+                </button>
+              </>
+            )}
+            {props.authError && <p className="error">{props.authError}</p>}
+          </div>
+        )}
 
         <div className="section-title">みんな ({props.members.length})</div>
         {props.members.length > SQUAD_LIMIT && (

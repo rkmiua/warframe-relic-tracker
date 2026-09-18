@@ -3,6 +3,7 @@ import { CRAFTED, NOT_OWNED, OWNED, type Part, type Relic, type Status } from '.
 import type { StatusMap } from './seed'
 
 const STORAGE_KEY = 'relic-vault.collection.v1'
+const UPDATED_KEY = 'relic-vault.collection.updatedAt.v1'
 
 /** 自分の所持状態を localStorage に出し入れする。 */
 export function loadCollection(): StatusMap {
@@ -24,11 +25,23 @@ export function loadCollection(): StatusMap {
   }
 }
 
-export function saveCollection(states: StatusMap): void {
+export function saveCollection(states: StatusMap, updatedAt: number): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([...states]))
+    localStorage.setItem(UPDATED_KEY, String(updatedAt))
   } catch {
     // プライベートブラウズなどで書けなくても、その場の操作は続けられるようにする
+  }
+}
+
+/** この端末で最後に変更した時刻。端末間でどちらが新しいかを決めるのに使う。 */
+export function loadUpdatedAt(): number {
+  try {
+    const raw = localStorage.getItem(UPDATED_KEY)
+    const value = raw === null ? 0 : Number(raw)
+    return Number.isFinite(value) ? value : 0
+  } catch {
+    return 0
   }
 }
 

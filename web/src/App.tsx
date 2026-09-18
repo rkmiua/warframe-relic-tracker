@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { Catalog, loadCatalog } from './data/catalog'
 import { NOT_OWNED, type Part, type Status } from './data/types'
-import { loadCollection, saveCollection, withStatus } from './state/collection'
+import { loadCollection, loadUpdatedAt, saveCollection, withStatus } from './state/collection'
 import { encodeSeed, type StatusMap } from './state/seed'
 import { loadMyName, saveMyName, type Member } from './state/members'
 import { generateRoomCode, joinRoom, type RoomHandle } from './state/sync'
+import { describeAuthError, signInWithGoogle, signOutAccount, watchAccount, type Account } from './state/firebase'
+import { watchMyData, type PersonalSync } from './state/personalSync'
+import { loadFirebaseConfig } from './state/firebaseConfig'
 import { loadSquad, saveSquad, toggleSquad } from './state/squad'
 import { AppContext, type Route } from './ui/context'
 import { BoxIcon, GridIcon, PeopleIcon, SearchIcon } from './ui/icons'
@@ -30,6 +33,12 @@ export function App() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [states, setStates] = useState<StatusMap>(loadCollection)
+  // この端末で最後に変更した時刻。端末間でどちらを採るかの判断に使う
+  const updatedAt = useRef<number>(loadUpdatedAt())
+  const [account, setAccount] = useState<Account | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [signingIn, setSigningIn] = useState(false)
+  const personal = useRef<PersonalSync | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [myName, setMyName] = useState(loadMyName)
   const [squadIDs, setSquadIDs] = useState<string[]>(loadSquad)
@@ -53,7 +62,7 @@ export function App() {
     )
   }, [])
 
-  useEffect(() => saveCollection(states), [states])
+  useEffect(() => saveCollection(states, updatedAt.current), [states])
   useEffect(() => saveMyName(myName), [myName])
   useEffect(() => saveSquad(squadIDs), [squadIDs])
 
@@ -126,13 +135,22 @@ export function App() {
     }
   }, [room])
 
-  const setStatus = useCallback((part: Part, status: Status) => {
-    setStates((current) => withStatus(current, part, status))
+  const touch = useCallback(() => {
+    updatedAt.current = Date.now()
   }, [])
+
+  const setStatus = useCallback(
+    (part: Part, status: Status) => {
+      touch()
+      setStates((current) => withStatus(current, part, status))
+    },
+    [touch],
+  )
 
   const setMany = useCallback(
     (partIDs: string[], status: Status) => {
       if (!catalog) return
+      touch()
       setStates((current) => {
         const next = new Map(current)
         for (const id of partIDs) {
@@ -144,7 +162,7 @@ export function App() {
         return next
       })
     },
-    [catalog],
+    [catalog, touch],
   )
 
   const push = useCallback(
@@ -155,6 +173,87 @@ export function App() {
     () => setStacks((current) => ({ ...current, [tab]: current[tab].slice(0, -1) })),
     [tab],
   )
+
+  // ログイン状態を見張る。設定が無ければ何もしない（ローカルだけで動く）
+  useEffect(() => {
+    if (!loadFirebaseConfig()) return
+    let stop: (() => void) | undefined
+    let cancelled = false
+    void watchAccount((next) => {
+      if (!cancelled) setAccount(next)
+    }).then(
+      (unsubscribe) => {
+        if (cancelled) unsubscribe()
+        else stop = unsubscribe
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+      stop?.()
+    }
+  }, [])
+
+  // Google でログインしている間は、自分の行を通して端末どうしをつなぐ。
+  // 匿名のままだと端末ごとに別人になるので同期しない。
+  useEffect(() => {
+    personal.current?.stop()
+    personal.current = null
+    if (!account || account.isAnonymous) return
+
+    let cancelled = false
+    void watchMyData(
+      account.uid,
+      ({ states: remote, updatedAt: remoteUpdatedAt }) => {
+        if (cancelled) return
+        // 新しい方を採る。同じなら何もしない
+        if (remoteUpdatedAt <= updatedAt.current) return
+        updatedAt.current = remoteUpdatedAt
+        setStates(remote)
+      },
+      (message) => {
+        if (!cancelled) setAuthError(message)
+      },
+    ).then(
+      (handle) => {
+        if (cancelled) handle.stop()
+        else personal.current = handle
+      },
+      () => undefined,
+    )
+    return () => {
+      cancelled = true
+      personal.current?.stop()
+      personal.current = null
+    }
+  }, [account])
+
+  // 自分の変更を、少し待ってからまとめて送る
+  useEffect(() => {
+    if (!personal.current || !mySeed) return
+    const at = updatedAt.current
+    const timer = setTimeout(() => {
+      void personal.current?.push(mySeed, at).catch(() => undefined)
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [mySeed])
+
+  const logIn = useCallback(() => {
+    setSigningIn(true)
+    setAuthError(null)
+    signInWithGoogle().then(
+      () => setSigningIn(false),
+      (error: unknown) => {
+        setSigningIn(false)
+        setAuthError(describeAuthError(error))
+      },
+    )
+  }, [])
+
+  const logOut = useCallback(() => {
+    setAuthError(null)
+    void signOutAccount().catch(() => undefined)
+  }, [])
 
   // タブと階層ごとにスクロール位置を覚えておく。
   // 覚えないと、別のタブに移ったときに前のタブの位置のままになってしまう。
@@ -249,6 +348,11 @@ export function App() {
             onJoinRoom={connect}
             onLeaveRoom={leaveRoom}
             onCreateRoom={() => connect(generateRoomCode())}
+            account={account}
+            authError={authError}
+            signingIn={signingIn}
+            onSignIn={logIn}
+            onSignOut={logOut}
           />
         )
     }
