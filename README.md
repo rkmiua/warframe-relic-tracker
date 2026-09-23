@@ -117,8 +117,8 @@ Firebase SDK は設定があるときだけ読み込むので、使わなけれ�
 
 ## 公開する
 
-Firebase Hosting から配信している。main に push すれば GitHub Actions が配信する
-（`web/` 以下を変えたときだけ動く）。
+Firebase Hosting から配信している。main に push すれば GitHub Actions が配信する（`web/` 以下を変えたときだけ動く）。
+毎日 12 時にはレリックのデータを見に行き、増えていれば取り込んで配信する。
 
 手元から配信することもできる。
 

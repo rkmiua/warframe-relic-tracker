@@ -1,6 +1,6 @@
 # アプリ本体を Firebase Hosting に配信する。
 #  - web/ 以下を変えて push したとき
-#  - 毎週月曜に、レリックのデータが増えていないか見に行くとき
+#  - 毎日、レリックのデータが増えていないか見に行くとき
 #  - 手で動かしたいとき
 name: Deploy
 
@@ -13,8 +13,9 @@ on:
       - '.firebaserc'
       - '.github/workflows/deploy.yml'
   schedule:
-    # 毎週月曜 12:00 (JST)。新しい Prime が出たころに拾えればよいので、この頻度で足りる
-    - cron: '0 3 * * 1'
+    # 毎日 12:00 (JST)。データ元の反映がいつになるか読めないので、毎日見に行く。
+    # 変化がなければ何も書き込まず、配信もしない
+    - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       refresh_data:
