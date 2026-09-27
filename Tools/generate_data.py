@@ -20,6 +20,7 @@ import json
 import os
 import re
 import ssl
+import subprocess
 import sys
 import time
 import urllib.request
@@ -44,6 +45,24 @@ TIER_ORDER = ["Lith", "Meso", "Neo", "Axi", "Vanguard"]
 # Requiem レリックは中身が Requiem Mod や Kuva で、Prime パーツ集めとは別の話なので載せない
 EXCLUDED_TIERS = {"Requiem"}
 ROMAN = {"I": 1, "II": 2, "III": 3, "IV": 4}
+
+# 「Saryn Prime Systems Blueprint」→ セット「Saryn Prime」＋ パーツ「Systems Blueprint」
+PRIME_PART = re.compile(r"^(?P<set>.+? Prime)\s+(?P<part>.+)$")
+# Warframe かどうかは、この顔ぶれが揃っているかで見分ける
+WARFRAME_PARTS = {"Neuroptics Blueprint", "Chassis Blueprint", "Systems Blueprint"}
+
+
+def guess_set_from_part(part_id: str):
+    """items 側にまだ載っていない Prime を、報酬の名前から組み立てる。
+
+    実装直後の Prime は、レリックの中身には出てくるのに
+    アイテム一覧への登録が遅れることがある。そのまま放っておくと
+    セットに属さない報酬として扱われ、持ち具合を記録できなくなる。
+    """
+    m = PRIME_PART.match(part_id)
+    if not m:
+        return None
+    return m.group("set"), m.group("part")
 
 
 def code_key(code: str):
@@ -182,6 +201,36 @@ def build(relic_drops, items):
     if skipped:
         print(f"  ! 名前の無いレリックレコードを {skipped} 件スキップしました", file=sys.stderr)
 
+    # --- items 側に載っていない Prime を、報酬の名前から補う ---
+    reward_names = {slot["partID"] for entry in meta.values() for slot in entry["rewards"].values()}
+    guessed_sets: dict[str, list[tuple[str, str]]] = {}
+    for reward_name in sorted(reward_names):
+        if reward_name in part_to_set:
+            continue
+        guessed = guess_set_from_part(reward_name)
+        if not guessed:
+            continue  # Forma や Kuva など、そもそも Prime ではないもの
+        set_name, short = guessed
+        guessed_sets.setdefault(set_name, []).append((reward_name, short))
+
+    for set_name, members in guessed_sets.items():
+        shorts = {short for _, short in members}
+        sets[set_name] = {
+            "id": set_name,
+            "name": set_name,
+            # 設計図の顔ぶれで Warframe かどうかを見分ける
+            "category": "Warframes" if WARFRAME_PARTS & shorts else "Misc",
+            "vaulted": False,
+            "partIDs": sorted(name for name, _ in members),
+        }
+        for reward_name, _ in members:
+            part_to_set[reward_name] = set_name
+    if guessed_sets:
+        print(f"  ! アイテム一覧に無い Prime を報酬名から補いました: "
+              f"{', '.join(sorted(guessed_sets))}", file=sys.stderr)
+        print("    （必要個数は 1 個として扱います。上流が追いついたら正しい値に直ります）",
+              file=sys.stderr)
+
     # --- 報酬に出てくる全パーツ（Prime セットに属さない Forma 等も含む）---
     rarity_rank = {"Rare": 0, "Uncommon": 1, "Common": 2}
     parts = {}
@@ -191,9 +240,14 @@ def build(relic_drops, items):
             if pid in parts:
                 continue
             set_id = part_to_set.get(pid)
-            if set_id:
+            if set_id and "parts" in sets[set_id]:
                 short = next((p["name"] for p in sets[set_id]["parts"] if p["id"] == pid), pid)
                 required = next((p["required"] for p in sets[set_id]["parts"] if p["id"] == pid), 1)
+            elif set_id:
+                # 報酬名から組み立てたセット。個数は分からないので 1 個とする
+                guessed = guess_set_from_part(pid)
+                short = guessed[1] if guessed else pid
+                required = 1
             else:
                 short, required = pid, 1
             parts[pid] = {
@@ -206,6 +260,8 @@ def build(relic_drops, items):
 
     # セット側は実際に報酬として存在するパーツだけに整える
     for s in sets.values():
+        if "parts" not in s:
+            continue  # 報酬名から組み立てたものは、すでに partIDs が入っている
         seen = set()
         kept = []
         for p in s["parts"]:
@@ -231,6 +287,28 @@ def build(relic_drops, items):
         "sets": sorted((s for s in sets.values() if s["partIDs"]), key=lambda s: s["name"]),
         "parts": sorted(parts.values(), key=lambda p: p["id"]),
     }
+
+
+def commits_behind(root: str) -> int:
+    """手元がどれだけ遅れているか。
+
+    番号は手元の JSON から引き継ぐので、古いまま作り直すと
+    すでに配った番号を別のパーツに振ってしまう。
+    分からないときは 0 を返して、判断を邪魔しない。
+    """
+    def git(*args, timeout=30):
+        return subprocess.run(["git", *args], cwd=root, capture_output=True,
+                              text=True, timeout=timeout)
+    try:
+        if git("rev-parse", "--git-dir").returncode != 0:
+            return 0  # git で管理していない
+        if git("rev-parse", "--abbrev-ref", "@{u}").returncode != 0:
+            return 0  # 追いかける先がない
+        git("fetch", "--quiet")
+        out = git("rev-list", "--count", "HEAD..@{u}", timeout=10)
+        return int(out.stdout.strip() or 0) if out.returncode == 0 else 0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 0
 
 
 def assign_stable_indices(parts, previous_paths):
@@ -276,6 +354,17 @@ def main():
         os.path.join(root, "web", "public", "warframe_data.json"),
     ])
     args = ap.parse_args()
+
+    behind = commits_behind(root)
+    if behind and not args.first_run:
+        print(
+            f"\n中止: 手元が {behind} 個分 遅れています。\n"
+            f"       パーツ番号は手元の JSON から引き継ぐので、古いまま作り直すと\n"
+            f"       すでに配った番号を別のパーツに振ってしまいます。\n"
+            f"       git pull してから、もう一度実行してください。",
+            file=sys.stderr,
+        )
+        return 1
 
     print("データ取得:", file=sys.stderr)
     relic_drops = fetch(RELIC_DROPS_URL, args.cache, "relics.json")["relics"]
